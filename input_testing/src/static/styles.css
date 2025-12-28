@@ -1,0 +1,160 @@
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body{
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #161a2f;
+}
+
+.container{
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    padding: 20px;
+}
+
+.main-content{
+    width: 800px;
+}
+
+.card{
+    background-color: #161a2f;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px #130b17;
+}
+h1{
+    color: aliceblue;
+    margin-bottom: 10px;
+}
+
+h3{
+    color: aliceblue;
+    margin-bottom: 10px;
+}
+
+.status{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+    
+}
+
+.stat{
+    background: #db941bb1;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 5px 7px #323232;
+}
+
+.stat-label{
+    color: aliceblue;
+    font-size: 15px;
+    margin-bottom: 5px;
+}
+
+.stat-value{
+    color: aliceblue;
+    font-size: 30px;
+    font-weight: bold;
+}
+
+.form-group{
+    margin-bottom: 20px;
+}
+
+.right-content{
+    width: 700px;
+    background-color: #161a2f;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 10px 30px #0f0f0f;
+}
+
+label{
+    display: block;
+    color: aliceblue;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+input{
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #130b17;
+    border-radius: 6px;
+    font-size: 12px;
+    transition: border-color 0.3s;
+}
+
+input:focus {
+    outline: none;
+    border-color: #db941bb1;
+}
+
+button {
+    background: linear-gradient(135deg, #db951bc1 0%, #80461fbf 100%);
+    color: aliceblue;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+button:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px #130b17;
+}
+
+button:disabled{
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.message{
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 20px;
+    display: none;
+}
+
+.message.success{
+    background-color: #092f3b;
+    color: #11c51a;
+}
+
+.message.error{
+    background-color: #323232;
+    color: #c4454597;
+}
+
+.quick-fill{
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.quick-btn{
+    background: #ba6912c8;
+    color: aliceblue;
+    border: 1px solid #0f0f0f;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quick-btn:hover{
+    background-color: #593210;
+}
