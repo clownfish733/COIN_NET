@@ -1,6 +1,7 @@
 mod network;
 mod miner;
 mod messages;
+mod transactions;
 
 use env_logger::{Builder};
 use network::{start_network_handling, Node};
