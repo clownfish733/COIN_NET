@@ -84,7 +84,7 @@ impl Node{
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if !block.block_header.height + 1 == self.height{warn!("Invalid block height: {:#?}", block); return false}
+        if !(block.block_header.height + 1 == self.height){warn!("Invalid block height: {:#?}", block); return false}
         if self.utxos.add_block(block.clone()){
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
@@ -94,7 +94,7 @@ impl Node{
                 self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
                 }
             }   
-        }else{warn!("Invalid block: {:#?}", block); return false}
+        }else{warn!("Invalid block: {:#?}", block); panic!()}
         
         true
     }
@@ -495,6 +495,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         let mut  node_lock = node.write().await;
                                         node_lock.add_block(block.clone())
                                     };
+                                    info!("IS NEW: {}", is_new);
                                     if is_new{
                                     {
                                         let peer_manager_lock = peer_manager.lock().await;
