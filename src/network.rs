@@ -84,7 +84,7 @@ impl Node{
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if !(block.block_header.height + 1 == self.height){warn!("Invalid block height: {:#?}", block); return false}
+        if !(block.block_header.height == self.height + 1){warn!("Invalid block height: {:#?}", block); return false}
         if self.utxos.add_block(block.clone()){
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
