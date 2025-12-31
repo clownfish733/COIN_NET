@@ -17,6 +17,7 @@ use crate::{messages::{Blocks, GetBlocks, GetInv, GetPeerAddrs, Inv, Mempool, Ne
     transactions::{Transaction, UTXOS, User},
 };
 
+const DIFFICULTY: usize = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node{
@@ -39,7 +40,7 @@ impl Node{
             mempool: Mempool::new(), 
             headers: Vec::new(),
             block_chain: Vec::new(),
-            difficulty: 3,
+            difficulty: DIFFICULTY,
             user: User::new(),
             reward: 10,
             utxos: UTXOS::new()
@@ -83,7 +84,7 @@ impl Node{
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if !block.block_header.height == self.height{return false}
+        if !block.block_header.height + 1 == self.height{warn!("Invalid block height: {:#?}", block); return false}
         if self.utxos.add_block(block.clone()){
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
@@ -125,7 +126,7 @@ impl Node{
     pub fn get_next_block(&mut self) -> Block{
         let mut next_transactions = self.get_next_transactions();
         next_transactions.push(Transaction::reward(self.reward, self.user.get_pub_key(), self.version));
-        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height)
+        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height + 1)
     }
 
     
@@ -246,7 +247,9 @@ impl PeerManager{
     }
 
     async fn broadcast(&self, message: String){
+        info!("Broadcasting");
         for (peer, _peer_info) in &self.peers {
+            info!("Sending: {}, {}", peer, message);
             self.send(peer, ConnectionResponse::send(message.clone())).await.unwrap();
         }
     }
@@ -333,6 +336,7 @@ async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>
                                 peer_manager_lock.send(&peer, msg).await.unwrap();
                             }
                         }
+                        else{warn!("Failed to connect to: {}", peer)}
                                             
                     }                
             }
