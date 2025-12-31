@@ -14,7 +14,7 @@ use Coin::{
 
 const NET_ADDR: &str = "0.0.0.0:8080";
 
-const FILE_PATH: &str = "/configs/node.json";
+const FILE_PATH: &str = "configs/node.json";
 
 fn get_bootstrap() -> Result<Vec<SocketAddr>>{
     let file = File::open("configs/Bootstrap.json")?;

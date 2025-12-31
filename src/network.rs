@@ -52,7 +52,7 @@ impl Node{
     }
 
     pub fn store<P: AsRef<Path>>(&self, path: P) -> Result<()>{
-        let file = File::open(path)?;
+        let file = File::create(path)?;
         serde_json::to_writer_pretty(&file, self)?;
         Ok(())
     }
@@ -89,9 +89,11 @@ impl Node{
             self.headers.push(block.block_header.clone());
             self.height += 1;
             for tx in block.transactions.clone(){
+                if tx.input_count != 0{
                 self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
+                }
             }   
-        }else{return false}
+        }else{warn!("Invalid block: {:#?}", block); return false}
         
         true
     }

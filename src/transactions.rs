@@ -40,7 +40,7 @@ impl UTXOS{
     }
 
     pub fn validate_transaction(&self, transaction: Transaction) -> bool{
-        if self.get_fee(transaction.clone()) == None{
+        if self.get_fee(transaction.clone()) == None && !transaction.input_count == 0{
             return false
         }
         
@@ -169,7 +169,7 @@ impl <'de>Deserialize<'de>for User{
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Transaction{
     version: usize,
-    input_count: usize,
+    pub input_count: usize,
     inputs: Vec<TxInput>,
     output_count: usize,
     outputs: Vec<TxOutput>,

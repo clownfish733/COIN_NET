@@ -1,0 +1,14 @@
+{
+  "user": {
+    "public_key": "02118569490d291d98fa95d7e497e61d71d607ac39983ef723844dde1854e64066",
+    "private_key": "330af5e965520b4e946f4fe92270be05074bc954448e647312c4fc73f0b65743"
+  },
+  "height": 0,
+  "version": 0,
+  "mempool": [],
+  "headers": [],
+  "block_chain": [],
+  "difficulty": 3,
+  "reward": 10,
+  "utxos": {}
+}

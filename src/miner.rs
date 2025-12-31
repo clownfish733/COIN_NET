@@ -89,11 +89,17 @@ impl Block{
 
         let mut nonce: Nonce;
 
+        let mut count: usize = 1;
+
         let target = self.block_header.difficulty;
 
         while !stop.load(Ordering::Relaxed){
             nonce = get_nonce();
             self.update_nonce(nonce);
+            if count%100000 == 0{
+                info!("{} tried {} blocks", id, count);
+            }
+            count += 1;
             let hash = self.calculate_hash();
             if self.meets_difficulty(&String::from_utf8_lossy(&hash), target){
                 info!("Mined: {:?}", self);
