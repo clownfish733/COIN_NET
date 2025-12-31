@@ -1,11 +1,11 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 #[allow(unused)]
 use log::{info, error, warn, Level};
 
 use tokio::sync::{RwLock, mpsc};
 
-use std::{sync::Arc, net::SocketAddr, fs::File, io::BufReader};
+use std::{sync::Arc, net::SocketAddr, fs::File, io::BufReader, env};
 
 use Coin::{
     network::{NetworkCommand, start_network_handling, Node},
@@ -26,15 +26,19 @@ fn get_bootstrap() -> Result<Vec<SocketAddr>>{
 
 #[tokio::main]
 async fn main() -> Result<()>{
-
 //configuring logging environment
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)  // default level
         .init();
 
+    let node = Arc::new(RwLock::new(match env::args().nth(1).as_deref(){
+        Some("load") => Node::load(FILE_PATH)?,
+        Some("new") => Node::new(),
+        Some(arg) => return Err(anyhow!("Invalid arguement '{}' expected 'new' or 'load'", arg)),
+        None => return Err(anyhow!("Missing argument: expected: 'new' or 'load'")),
+    }));
+
     info!("Starting Node ...");
-    
-    let node = Arc::new(RwLock::new(Node::new()));
 
     let (miner_tx, miner_rx) = mpsc::channel::<MiningCommand>(10);
 
