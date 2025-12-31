@@ -2,13 +2,16 @@ use std::{cmp::Ordering, collections::{BinaryHeap, HashSet}, net::SocketAddr};
 
 use serde::{Serialize, Deserialize};
 
+use anyhow::Result;
+
 use std::{hash::{Hash, Hasher}};
 
-use crate::miner::{BlockHeader, Block};
+use crate::{
+    miner::{Block},
+    transactions::Transaction,
+};
 
-const tx_per_block: usize = 10;
-
-pub type Address = [u8; 20];
+const TX_PER_BLOCK: usize = 10;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Verack{
@@ -55,8 +58,15 @@ impl<T: Ord + Clone + Hash> HeapSet<T>{
             None
         }
     }
-    pub fn get_vec(self) -> Vec<T>{
-        self.heap.into_vec()
+    pub fn get_vec(&self) -> Vec<T>{
+        self.heap.clone().into_vec()
+    }
+
+    pub fn from_vec(v: Vec<T>) -> Self{
+        Self {
+            heap: BinaryHeap::from(v.clone()), 
+            elements: HashSet::from_iter(v) 
+        }
     }
 
     pub fn remove(&mut self, item: T){
@@ -71,79 +81,121 @@ impl<T: Ord + Clone + Hash> HeapSet<T>{
 }
 
 #[derive(Clone, Debug)]
-pub struct Mempool{
-    mempool: HeapSet<Transaction>
-}
+pub struct Mempool(HeapSet<TransactionWithFee>);
+
 
 impl Mempool{
     pub fn new() -> Self{
-        Self {
-             mempool: HeapSet::new()
-        }
+        Self(HeapSet::new())
     }
     pub fn get_inv(self) -> Vec<Transaction>{
-        self.mempool.get_vec()
+        self.0.get_vec().iter()
+            .map(|txwf| txwf.transaction.clone())
+            .collect()
 
     }
 
-    pub fn add(&mut self, tx: Transaction) -> bool{
-        self.mempool.push(tx)
+    pub fn add(&mut self, tx: Transaction, fee: usize) -> bool{
+        self.0.push(TransactionWithFee::new(tx, fee))
     }
-    pub fn update(&mut self, txs: Vec<Transaction>){
+    pub fn update(&mut self, txs: Vec<TransactionWithFee>){
         txs.iter().for_each(|tx| 
-            { let _ = self.mempool.push(tx.clone());
+            { let _ = self.0.push(tx.clone());
     });
     }
 
     pub fn get_next_transactions(&self) -> Vec<Transaction>{
-        let mut transactions = Vec::new();
-        let mut mempool_clone = self.mempool.clone();
-        for _ in 0..tx_per_block{
-            if let Some(item) = mempool_clone.pop() {
-                transactions.push(item)
-            }
-            else{
-                break;
+        let mut mempool_clone = self.0.clone();
+        let mut txs = Vec::new();
+        for _ in 0..TX_PER_BLOCK{
+            match mempool_clone.pop(){
+                Some(tx) => {
+                    txs.push(tx.transaction);
+                }
+                None => {
+                    return txs
+                }
             }
         }
 
-        transactions
+        txs
     }
 
-    pub fn remove(&mut self, transaction: Transaction){
-        self.mempool.remove(transaction);
+    pub fn remove(&mut self, transaction: TransactionWithFee){
+        self.0.remove(transaction);
+    }
+
+    pub fn to_vec(&self) -> Vec<TransactionWithFee>{
+        self.0.get_vec()
+    }
+
+    pub fn from_vec(txs: Vec<TransactionWithFee>) -> Result<Self>{
+        Ok(Self(HeapSet::from_vec(txs)))
+    }
+
+    
+}
+
+impl Serialize for Mempool{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        self.to_vec().clone().serialize(serializer)
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
-pub struct Transaction{
-    from: Address,
-    to: Address,
-    amount: usize,
+impl <'de>Deserialize<'de> for Mempool{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        let txs = Vec::<TransactionWithFee>::deserialize(deserializer)?;
+        use serde::de::Error;
+        Mempool::from_vec(txs).map_err(D::Error::custom)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransactionWithFee {
+    transaction: Transaction,
     fee: usize,
 }
 
-impl PartialEq for Transaction {
-    fn eq(&self, other: &Self) -> bool{
-        self.fee == other.fee
+impl TransactionWithFee{
+    pub fn new(transaction: Transaction, fee: usize) -> Self{
+        Self { 
+            transaction, 
+            fee 
+        }
     }
 }
 
-impl Ord for Transaction{
-    fn cmp(&self, other: &Self) -> Ordering{
+// Equality: based on BOTH transaction and fee (for HashSet)
+impl PartialEq for TransactionWithFee {
+    fn eq(&self, other: &Self) -> bool {
+        self.transaction == other.transaction && self.fee == other.fee
+    }
+}
+
+impl Eq for TransactionWithFee {}
+
+// Hash: based on BOTH transaction and fee (must match equality)
+impl Hash for TransactionWithFee {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.transaction.hash(state);
+        self.fee.hash(state);
+    }
+}
+
+// Ordering: by fee ONLY (for heap priority)
+impl Ord for TransactionWithFee {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.fee.cmp(&other.fee)
     }
 }
 
-impl PartialOrd for Transaction{
+impl PartialOrd for TransactionWithFee {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-impl Hash for Transaction{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.fee.hash(state)
     }
 }
 
@@ -155,20 +207,6 @@ pub struct NewBlock{
 impl NewBlock{
     pub fn new(block: Block) -> Self{
         Self { block }
-    }
-}
-
-impl Transaction {
-    pub fn new(from: Address, to: Address, amount: usize, fee: usize) -> Self{
-        Self { 
-            from, 
-            to, 
-            amount, 
-            fee 
-        }
-    }
-    pub fn to_string(&self) -> String{
-        serde_json::to_string(&self).unwrap().to_string()
     }
 }
 
@@ -194,6 +232,7 @@ impl Inv{
     }
 }
 
+/*
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetHeaders{
     pub start_height: usize,
@@ -221,6 +260,7 @@ impl Headers{
     }
 }
 
+*/
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetPeerAddrs;

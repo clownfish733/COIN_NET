@@ -1,22 +1,26 @@
 use std::{
-    collections::HashMap, net::SocketAddr, sync::Arc, time::Duration
+    collections::HashMap, fs::File, net::SocketAddr, path::Path, sync::Arc, time::Duration,
 };
 
 use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex, RwLock, mpsc}, time::sleep
+    io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex, RwLock, mpsc}
 };
 
+#[allow(unused)]
 use log::{error, info, warn};
 
-use crate::{messages::{GetHeaders, GetInv, GetPeerAddrs, Headers, Inv, Mempool, NewBlock, PeerAddrs, Ping, Pong, Transaction, Verack, Address, GetBlocks, Blocks}, 
-    miner::{Block, BlockHeader, HashDigest, MiningCommand, sha256}};
+use crate::{messages::{Blocks, GetBlocks, GetInv, GetPeerAddrs, Inv, Mempool, NewBlock, PeerAddrs, Ping, Pong, TransactionWithFee, Verack}, 
+    miner::{Block, BlockHeader, HashDigest, MiningCommand, sha256},
+    transactions::{Transaction, UTXOS, User},
+};
 
-#[derive(Clone, Debug)]
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node{
-    address: Address,
+    user: User,
     height: usize,
     version: usize,
     mempool: Mempool,
@@ -24,10 +28,11 @@ pub struct Node{
     pub block_chain: Vec<Block>,
     difficulty: usize,
     reward: usize,
+    utxos: UTXOS
 }
 
 impl Node{
-    pub fn new(address: Address) -> Self{
+    pub fn new() -> Self{
         Self { 
             height: 0, 
             version: 0, 
@@ -35,11 +40,23 @@ impl Node{
             headers: Vec::new(),
             block_chain: Vec::new(),
             difficulty: 3,
-            address,
+            user: User::new(),
             reward: 10,
+            utxos: UTXOS::new()
         }
     }
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self>{
+        let file = File::open(path)?;
+        let node: Self = serde_json::from_reader(file)?;
+        Ok(node)
+    }
 
+    pub fn store<P: AsRef<Path>>(&self, path: P) -> Result<()>{
+        let file = File::open(path)?;
+        serde_json::to_writer_pretty(&file, self)?;
+        Ok(())
+    }
+    /*
     pub fn update_headers(&mut self, headers: Headers){
         if headers.start_height + 1 == self.height{
             for header in headers.headers{
@@ -48,30 +65,48 @@ impl Node{
             }
         }
     }
+    */
 
     pub fn update_blocks(&mut self, blocks: Blocks){
         if blocks.start_height + 1 == self.height{
             for block in blocks.blockchain{
-                self.block_chain.push(block);
+                if self.utxos.add_block(block.clone()){
+                    self.block_chain.push(block.clone());
+                    self.headers.push(block.block_header.clone());
+                    self.height += 1;
+                    for tx in block.transactions.clone(){
+                        self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
+                    }   
+                }
             }
         }
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if let Some(last) = self.block_chain.last() && last.to_string() == block.to_string(){
-            return false
-        }
-        self.block_chain.push(block.clone());
-        self.headers.push(block.block_header.clone());
-        for transaction in block.transactions{
-            self.mempool.remove(transaction);
-        }
-        self.height += 1;
+        if !block.block_header.height == self.height{return false}
+        if self.utxos.add_block(block.clone()){
+            self.block_chain.push(block.clone());
+            self.headers.push(block.block_header.clone());
+            self.height += 1;
+            for tx in block.transactions.clone(){
+                self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
+            }   
+        }else{return false}
+        
         true
     }
 
-    pub fn get_next_transactions(&self) -> Vec<Transaction>{
-        self.mempool.get_next_transactions()
+    pub fn get_next_transactions(&mut self) -> Vec<Transaction>{
+        let mut valid_transactions = true;
+        let txs = self.mempool.get_next_transactions();
+        for tx in txs.clone(){
+            if !self.utxos.validate_transaction(tx.clone()){
+                self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx).unwrap()));
+                valid_transactions = false
+            }
+        }
+
+        if valid_transactions{txs} else {self.get_next_transactions()}
     }
 
     pub fn get_prev_hash(&self) -> HashDigest{
@@ -85,9 +120,9 @@ impl Node{
         }
     }
 
-    pub fn get_next_block(&self) -> Block{
+    pub fn get_next_block(&mut self) -> Block{
         let mut next_transactions = self.get_next_transactions();
-        next_transactions.push(Transaction::new([0u8; 20], self.address, self.reward, 0));
+        next_transactions.push(Transaction::reward(self.reward, self.user.get_pub_key(), self.version));
         Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height)
     }
 
@@ -110,8 +145,8 @@ enum NetMessage{
     Transaction(Transaction),
     GetInv(GetInv),
     Inv(Inv),
-    GetHeaders(GetHeaders),
-    Headers(Headers),
+    //GetHeaders(GetHeaders),
+    //Headers(Headers),
     GetPeerAddrs(GetPeerAddrs),
     PeerAddrs(PeerAddrs),
     Ping(Ping),
@@ -160,6 +195,7 @@ struct ConnectionResponse{
     connection_response_type: ConnectionResponseType,
 }
 
+#[allow(unused)]
 impl ConnectionResponse{
     fn close() -> Self{
         Self{
@@ -174,6 +210,7 @@ impl ConnectionResponse{
 }
 
 
+#[allow(unused)]
 enum ConnectionResponseType{
     Close,
     Send(String),
@@ -231,20 +268,24 @@ async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>
             NetworkCommand::Block(block) => {
                 {
                     let mut  node_lock = node.write().await;
-                    node_lock.add_block(block.clone());
+                    if !node_lock.add_block(block.clone()){
+                        continue
+                    };
                 }
                 {
                     info!("Broadcasting: {:?}" , &block);
                     let peer_manager_lock = peer_manager.lock().await;
                     peer_manager_lock.broadcast(NetMessage::NewBlock(NewBlock::new(block)).to_string()).await;
                 }
-                miner_tx.send(MiningCommand::Update_block).await.unwrap();
+                miner_tx.send(MiningCommand::UpdateBlock).await.unwrap();
 
             }
             NetworkCommand::Transaction(transaction) => {
+                if node.read().await.utxos.validate_transaction(transaction.clone()) {continue}
+                let fee = node.read().await.utxos.get_fee(transaction.clone()).unwrap();
                 {
                     let mut  node_lock = node.write().await;
-                    node_lock.mempool.add(transaction.clone());
+                    node_lock.mempool.add(transaction.clone(), fee);
                 }
                 {
                     let peer_manager_lock = peer_manager.lock().await;
@@ -322,12 +363,6 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         }
                                     }
                                     if verack.height > node_clone.height{
-                                        let msg = NetMessage::GetHeaders(GetHeaders::new(node_clone.height));
-                                        {
-                                            let peer_manager_lock = peer_manager.lock().await;
-                                            peer_manager_lock.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
-                                        }
-                                        sleep(Duration::from_millis(100)).await;
                                         let msg = NetMessage::GetBlocks(GetBlocks { start_height: node_clone.height });
                                         {
                                             let peer_manager_lock = peer_manager.lock().await;
@@ -336,6 +371,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                     }
                                 }
                                 
+                                /*
                                 NetMessage::GetHeaders(gh) => {
                                     let start_height = gh.start_height;
                                     
@@ -353,6 +389,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                     node_lock.update_headers(headers);
                                     }
                                 }
+                                */
 
                                 NetMessage::GetInv(_) => {
                                     
@@ -364,8 +401,14 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 }
 
                                 NetMessage::Inv(inv) => {
+                                    let mut txwf = Vec::new();
+                                    for tx in inv.mempool.clone(){
+                                        if let Some(fee) = node.read().await.utxos.get_fee(tx.clone()) && node.read().await.utxos.validate_transaction(tx.clone()){
+                                            txwf.push(TransactionWithFee::new(tx, fee));
+                                        }
+                                    }
                                     {
-                                        node.write().await.mempool.update(inv.mempool);
+                                        node.write().await.mempool.update(txwf);
                                     }
                                 }
 
@@ -431,11 +474,13 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 }
                                 
                                 NetMessage::Transaction(transaction) => {
-                                    let mut node_lock = node.write().await;
-                                    if node_lock.mempool.add(transaction.clone()){
-                                        let peer_manager_lock = peer_manager.lock().await;
-                                        peer_manager_lock.broadcast(NetMessage::Transaction(transaction).to_string()).await;
-                                    }
+                                    if let Some(fee) = node.read().await.utxos.get_fee(transaction.clone()) && node.read().await.utxos.validate_transaction(transaction.clone()){
+                                        let mut node_lock = node.write().await;
+                                        if node_lock.mempool.add(transaction.clone(), fee){
+                                            let peer_manager_lock = peer_manager.lock().await;
+                                            peer_manager_lock.broadcast(NetMessage::Transaction(transaction).to_string()).await;
+                                        }
+                                }
                                 }
 
                                 NetMessage::NewBlock(new_block) => {
@@ -449,7 +494,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         let peer_manager_lock = peer_manager.lock().await;
                                         peer_manager_lock.broadcast(NetMessage::NewBlock(NewBlock::new(block)).to_string()).await;
                                     }
-                                    miner_tx.send(MiningCommand::Update_block).await.unwrap();
+                                    miner_tx.send(MiningCommand::UpdateBlock).await.unwrap();
                                     }
                                 }
 
@@ -495,7 +540,7 @@ async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: m
     loop{
         let n = match reader.read(&mut buf).await{
             Ok(0) => {
-                tx.send(ConnectionEvent{peer: *peer, connection_event_type: ConnectionEventType::Close}).await?;
+                tx.send(ConnectionEvent::close(peer.clone())).await?;
                 return Ok(())
             }
             Ok(n) => {
@@ -503,7 +548,7 @@ async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: m
             }
             Err(e) => {
                 error!("Error reading from: {}", peer);
-                tx.send(ConnectionEvent{peer: *peer, connection_event_type: ConnectionEventType::Close}).await?;
+                tx.send(ConnectionEvent::close(peer.clone())).await?;
                 return Err(e.into())
             }
         };

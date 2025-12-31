@@ -1,6 +1,8 @@
 use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::{SystemTime, UNIX_EPOCH}};
 
 use anyhow::Result;
+
+#[allow(unused)]
 use log::{info, error, warn};
 
 use serde::{Deserialize, Serialize};
@@ -15,11 +17,11 @@ pub type HashDigest = [u8; 32];
 
 type Nonce = [u8; 16];
 
-use crate::messages::Transaction;
+use crate::transactions::Transaction;
 
 pub enum MiningCommand{
     Stop,
-    Update_block,
+    UpdateBlock,
 }
 
 pub fn sha256(message: String) -> HashDigest{
@@ -63,7 +65,7 @@ impl Block{
     }
 
     pub fn get_merkle_root(transactions: Vec<Transaction>) -> HashDigest{
-        Self::rec_merkle_root(transactions.iter().map(|tx| tx.to_string()).collect())
+        Self::rec_merkle_root(transactions.iter().map(|tx| tx.serialize()).collect())
     }
 
     pub fn to_string(&self) -> String{
@@ -199,8 +201,7 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
 
     let mut stop = Arc::new(AtomicBool::new(false));
 
-    let node_clone = node.read().await.clone();
-    let block = node_clone.get_next_block();
+    let block = node.write().await.get_next_block();
 
 
     let mut  handles = spawn_threads(block, Arc::clone(&stop), network_tx.clone());
@@ -213,7 +214,7 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
                 stop.store(true, Ordering::Relaxed);
                 break; // Exit the loop
             }
-            MiningCommand::Update_block => {
+            MiningCommand::UpdateBlock => {
                 stop.store(true, Ordering::Relaxed);
 
                 for handle in handles {
@@ -221,7 +222,7 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
                 }
 
                 stop = Arc::new(AtomicBool::new(false));
-                let block = node.read().await.get_next_block();
+                let block = node.write().await.get_next_block();
                 handles = spawn_threads(block, Arc::clone(&stop), network_tx.clone());
             }
         }

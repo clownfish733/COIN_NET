@@ -1,20 +1,18 @@
-mod network;
-mod miner;
-mod messages;
-
-use env_logger::{Builder};
-use network::{start_network_handling, Node};
-use miner::{start_mine_handling, MiningCommand};
-
 use anyhow::Result;
 
+#[allow(unused)]
 use log::{info, error, warn, Level};
 
 use tokio::sync::{RwLock, mpsc};
 
-use std::{fs::{self, File}, io::{BufReader, Write}, net::{SocketAddr, ToSocketAddrs}, sync::Arc};
+use std::{sync::Arc};
 
-use crate::{messages::Address, network::NetworkCommand};
+use Coin::{
+    network::{NetworkCommand, start_network_handling, Node},
+    miner::{start_mine_handling, MiningCommand}
+};
+
+const NET_ADDR: &str = "0.0.0.0:8081";
 
 #[tokio::main]
 async fn main() -> Result<()>{
@@ -26,12 +24,7 @@ async fn main() -> Result<()>{
 
     info!("Starting Node ...");
 
-    let net_addr = "0.0.0.0:8080";
-    
-
-    let address: Address = [4u8; 20];
-
-    let node = Arc::new(RwLock::new(Node::new(address.clone())));
+    let node = Arc::new(RwLock::new(Node::new()));
 
     let (miner_tx, miner_rx) = mpsc::channel::<MiningCommand>(10);
 
@@ -42,7 +35,7 @@ async fn main() -> Result<()>{
 
 
     tokio::spawn(async move {
-    if let Err(e) = start_network_handling(&net_addr.to_string(), node_clone, miner_tx_clone, network_rx).await {
+    if let Err(e) = start_network_handling(&NET_ADDR.to_string(), node_clone, miner_tx_clone, network_rx).await {
         error!("Network handling failed: {}", e);
     }
     });

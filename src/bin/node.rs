@@ -1,21 +1,20 @@
-mod network;
-mod miner;
-mod messages;
-mod transactions;
-
-use env_logger::{Builder};
-use network::{start_network_handling, Node};
-use miner::{start_mine_handling, MiningCommand};
-
 use anyhow::Result;
 
+#[allow(unused)]
 use log::{info, error, warn, Level};
 
 use tokio::sync::{RwLock, mpsc};
 
-use std::{fs::{self, File}, io::{BufReader, Write}, net::{SocketAddr, ToSocketAddrs}, sync::Arc};
+use std::{sync::Arc, net::SocketAddr, fs::File, io::BufReader};
 
-use crate::{messages::Address, network::NetworkCommand};
+use Coin::{
+    network::{NetworkCommand, start_network_handling, Node},
+    miner::{start_mine_handling, MiningCommand}
+};
+
+const NET_ADDR: &str = "0.0.0.0:8080";
+
+const FILE_PATH: &str = "/configs/node.json";
 
 fn get_bootstrap() -> Result<Vec<SocketAddr>>{
     let file = File::open("configs/Bootstrap.json")?;
@@ -34,21 +33,8 @@ async fn main() -> Result<()>{
         .init();
 
     info!("Starting Node ...");
-
-    let net_addr = "0.0.0.0:8081";
-
-    let bootstrap = match get_bootstrap(){
-        Ok(bootstrap) => bootstrap,
-        Err(e) => {
-            error!("Couldnt read bootstrap: {}", e);
-            return Err(e)
-        }
-    };
     
-
-    let address: Address = [2u8; 20];
-
-    let node = Arc::new(RwLock::new(Node::new(address.clone())));
+    let node = Arc::new(RwLock::new(Node::new()));
 
     let (miner_tx, miner_rx) = mpsc::channel::<MiningCommand>(10);
 
@@ -59,29 +45,36 @@ async fn main() -> Result<()>{
 
 
     tokio::spawn(async move {
-    if let Err(e) = start_network_handling(&net_addr.to_string(), node_clone, miner_tx_clone, network_rx).await {
+    if let Err(e) = start_network_handling(&NET_ADDR.to_string(), node_clone, miner_tx_clone, network_rx).await {
         error!("Network handling failed: {}", e);
     }
     });
-    for peer in bootstrap{
-        network_tx.send(NetworkCommand::Connect(peer)).await.unwrap();
-    }
 
     let node_clone = Arc::clone(&node);
+    let network_tx_clone = network_tx.clone();
     let miner_handle = tokio::spawn(async move {
-    if let Err(e) = start_mine_handling(miner_rx, node_clone, network_tx).await {
+    if let Err(e) = start_mine_handling(miner_rx, node_clone, network_tx_clone).await {
         error!("Mine handling failed: {}", e);
     }
     }); 
+
+    let bootstrap = match get_bootstrap(){
+        Ok(bootstrap) => bootstrap,
+        Err(e) => {
+            error!("Couldnt read bootstrap: {}", e);
+            return Err(e)
+        }
+    };
+    
+    for peer in bootstrap{
+        network_tx.send(NetworkCommand::Connect(peer)).await.unwrap();
+    }
 
 
     tokio::signal::ctrl_c().await?;
     info!("Shutting down ...");
     miner_tx.send(MiningCommand::Stop).await.unwrap();
     miner_handle.await?;
-    let blockchain = node.read().await.block_chain.clone();
-    for block in blockchain{
-        println!("{:?}", block);
-    }
+    node.read().await.store(FILE_PATH)?;
     Ok(())
 }
