@@ -152,7 +152,7 @@ impl Block{
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockHeader{
-    prev_hash: HashDigest, 
+    pub prev_hash: HashDigest, 
     merkle_root: HashDigest, 
     timestamp: usize,
     difficulty: usize,

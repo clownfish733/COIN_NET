@@ -54,7 +54,7 @@ async fn main() -> Result<()>{
     miner_handle.await?;
     let blockchain = node.read().await.block_chain.clone();
     for block in blockchain{
-        println!("{:?}", block);
+        println!("H: {:?}, P: {:?}", block.block_header.height, block.block_header.prev_hash);
     }
     Ok(())
 }

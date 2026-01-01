@@ -1,14 +1,14 @@
 use crate::{miner::{Block, sha256}};
 
-use std::{collections::HashMap, fs::File, path::Path};
+use std::{collections::HashMap, fmt::Write, fs::File, path::Path};
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
-use serde::{Deserialize, Serialize};
-use anyhow::{Ok, Result};
+use serde::{Deserialize, Serialize, de::{self, Visitor}};
+use anyhow::{Result};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct UTXOS(HashMap<([u8; 32], usize), TxOutput>);
 
 impl UTXOS{
@@ -69,6 +69,69 @@ impl UTXOS{
             self.add_transaction(tx);
         }
         true
+    }
+}
+
+impl Serialize for UTXOS{
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        let map: HashMap<String, &TxOutput> = self.0
+            .iter()
+            .map(|((hash, idx), output)| {
+                let key = format!("{}:{}", hex::encode(hash), idx);
+                (key, output)
+            })
+            .collect();
+        map.serialize(serializer)
+    }
+}
+
+impl <'de>Deserialize<'de> for UTXOS{
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        struct UTXOSVisitor;
+        
+        impl<'de>Visitor<'de> for UTXOSVisitor{
+            type Value = UTXOS;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("A map of string key in format 'hash:index")
+            }
+            
+            fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+                where
+                    A: serde::de::MapAccess<'de>, {
+                let mut utxos = HashMap::new();
+                while let Some((key, value)) = map.next_entry::<String, TxOutput>()? {
+
+                    let parts: Vec<&str> = key.split(":").collect();
+                    if parts.len() != 2{
+                        return Err(de::Error::custom("key must be in format 'hash:index"));
+                    }
+
+                    let hash_bytes = hex::decode(parts[0])
+                        .map_err(|e| de::Error::custom(format!("invalid hex: {}", e)))?;
+
+                    if hash_bytes.len() != 32{
+                        return Err(de::Error::custom("hash must be 32 bytes"));
+                    }
+
+                    let mut hash = [0u8; 32];
+                    hash.copy_from_slice(&hash_bytes);
+
+                    let idx = parts[1].parse::<usize>()
+                        .map_err(|e| de::Error::custom(format!("invalid index: {}", e)))?;
+
+                    utxos.insert((hash, idx), value);
+                }
+
+                Ok(UTXOS(utxos))
+            }
+        }
+
+        deserializer.deserialize_map(UTXOSVisitor)
     }
 }
 
