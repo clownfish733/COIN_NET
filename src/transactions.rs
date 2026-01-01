@@ -8,6 +8,10 @@ use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize, de::{self, Visitor}};
 use anyhow::{Result};
 
+pub fn is_coinbase(transaction: &Transaction) -> bool{
+    transaction.input_count == 0
+}
+
 #[derive(Clone, Debug)]
 pub struct UTXOS(HashMap<([u8; 32], usize), TxOutput>);
 
@@ -40,7 +44,9 @@ impl UTXOS{
     }
 
     pub fn validate_transaction(&self, transaction: Transaction) -> bool{
-        if self.get_fee(transaction.clone()) == None && !transaction.input_count == 0{
+        if is_coinbase(&transaction){return true}
+
+        if self.get_fee(transaction.clone()) == None{
             return false
         }
         
@@ -53,6 +59,7 @@ impl UTXOS{
         }
         true
     }
+
 
     pub fn add_transaction(&mut self, transaction: Transaction){
         let hash = sha256(transaction.serialize());
