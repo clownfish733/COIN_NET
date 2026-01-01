@@ -78,13 +78,16 @@ impl Node{
                     for tx in block.transactions.clone(){
                         self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
                     }   
+                }else{
+                    warn!("Invalid Block Received");
                 }
             }
         }
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if !(block.block_header.height == self.height + 1){warn!("Invalid block height: {:#?}", block); return false}
+        info!("Current Height: {}", self.height);
+        if block.block_header.height != (self.height + 1) {warn!("Invalid block height: {:#?}", block); return false}
         if self.utxos.add_block(block.clone()){
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
@@ -126,7 +129,7 @@ impl Node{
     pub fn get_next_block(&mut self) -> Block{
         let mut next_transactions = self.get_next_transactions();
         next_transactions.push(Transaction::reward(self.reward, self.user.get_pub_key(), self.version));
-        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height + 1)
+        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height.clone() + 1)
     }
 
     
@@ -510,6 +513,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                     let mut node_lock = node.write().await;
                                     node_lock.update_blocks(blocks);
                                     }
+                                    miner_tx.send(MiningCommand::UpdateBlock).await.unwrap();
                                 }
 
                                 NetMessage::GetBlocks(get_blocks) => {
@@ -543,7 +547,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
 }
 
 async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: mpsc::Sender<ConnectionEvent>) -> Result<()>{
-    let mut buf = [0u8; 1024];
+    let mut buf =vec![0u8; 1024*1024];
     loop{
         let n = match reader.read(&mut buf).await{
             Ok(0) => {

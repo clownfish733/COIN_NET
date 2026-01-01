@@ -3,9 +3,9 @@ use anyhow::{Result, anyhow};
 #[allow(unused)]
 use log::{info, error, warn, Level};
 
-use tokio::sync::{RwLock, mpsc};
+use tokio::{runtime::{self, Builder}, sync::{RwLock, mpsc}};
 
-use std::{sync::Arc, net::SocketAddr, fs::File, io::BufReader, env};
+use std::{env, fs::File, io::BufReader, net::SocketAddr, sync::Arc, time::Duration};
 
 use Coin::{
     network::{NetworkCommand, start_network_handling, Node},
@@ -30,6 +30,7 @@ async fn main() -> Result<()>{
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)  // default level
         .init();
+
 
     let node = Arc::new(RwLock::new(match env::args().nth(1).as_deref(){
         Some("load") => Node::load(FILE_PATH)?,
@@ -80,5 +81,6 @@ async fn main() -> Result<()>{
     miner_tx.send(MiningCommand::Stop).await.unwrap();
     miner_handle.await?;
     node.read().await.store(FILE_PATH)?;
+    tokio::time::sleep(Duration::from_millis(300)).await;
     Ok(())
 }
