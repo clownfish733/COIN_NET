@@ -85,6 +85,7 @@ impl Node{
                     warn!("Invalid Block Received");
                 }
             }
+            info!("New Height: {}", self.height);
         }
     }
 
@@ -131,7 +132,7 @@ impl Node{
     pub fn get_next_block(&mut self) -> Block{
         let mut next_transactions = self.get_next_transactions();
         next_transactions.push(Transaction::reward(self.reward, self.user.get_pub_key(), self.version));
-        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version + 1, self.height.clone() + 1)
+        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height.clone() + 1)
     }
 
     
