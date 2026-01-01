@@ -69,12 +69,13 @@ impl Node{
     */
 
     pub fn update_blocks(&mut self, blocks: Blocks){
-        if blocks.start_height + 1 == self.height{
+        if blocks.start_height == self.height + 1{
             for block in blocks.blockchain{
                 if self.utxos.add_block(block.clone()){
                     self.block_chain.push(block.clone());
                     self.headers.push(block.block_header.clone());
                     self.height += 1;
+
                     for tx in block.transactions.clone(){
                         self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
                     }   
@@ -83,6 +84,7 @@ impl Node{
                 }
             }
         }
+        info!("New Height: {}", self.height);
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
@@ -129,7 +131,7 @@ impl Node{
     pub fn get_next_block(&mut self) -> Block{
         let mut next_transactions = self.get_next_transactions();
         next_transactions.push(Transaction::reward(self.reward, self.user.get_pub_key(), self.version));
-        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version, self.height.clone() + 1)
+        Block::new(next_transactions, self.get_prev_hash(), self.difficulty, self.version + 1, self.height.clone() + 1)
     }
 
     
@@ -372,7 +374,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         }
                                     }
                                     if verack.height > node_clone.height{
-                                        let msg = NetMessage::GetBlocks(GetBlocks { start_height: node_clone.height });
+                                        let msg = NetMessage::GetBlocks(GetBlocks { start_height: node_clone.height + 1});
                                         {
                                             let peer_manager_lock = peer_manager.lock().await;
                                             peer_manager_lock.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
