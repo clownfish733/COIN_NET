@@ -96,7 +96,7 @@ impl Block{
         while !stop.load(Ordering::Relaxed){
             nonce = get_nonce();
             self.update_nonce(nonce);
-            if count%100000 == 0{
+            if count%250000 == 0{
                 info!("{} tried {} blocks", id, count);
             }
             count += 1;
@@ -186,7 +186,7 @@ fn spawn_threads(block: Block, stop: Arc<AtomicBool>, network_tx: mpsc::Sender<N
         .map(|n| n.get())
         .unwrap_or(1);
 
-     info!("Spawning: {} mining_threads", num_threads);
+     info!("Spawning: {} mining_threads for block: {}", num_threads, block.block_header.height);
 
     let mut handles = Vec::new();
 
