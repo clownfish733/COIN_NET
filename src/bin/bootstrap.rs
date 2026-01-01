@@ -5,7 +5,9 @@ use log::{info, error, warn, Level};
 
 use tokio::sync::{RwLock, mpsc};
 
-use std::{sync::Arc};
+use std::{sync::Arc, io::Write};
+
+use log::LevelFilter;
 
 use Coin::{
     network::{NetworkCommand, start_network_handling, Node},
@@ -19,9 +21,39 @@ async fn main() -> Result<()>{
 
 //configuring logging environment
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)  // default level
+        .format(|buf, record| {
+            // Color by log level
+            let level_color = match record.level() {
+                log::Level::Error => "\x1b[31m", // Red
+                log::Level::Warn => "\x1b[33m",  // Yellow
+                log::Level::Info => "\x1b[32m",  // Green
+                log::Level::Debug => "\x1b[36m", // Cyan
+                log::Level::Trace => "\x1b[90m", // Gray
+            };
+            
+            // Color by module/target
+            let target = record.target();
+            let module_color = if target.contains("network") {
+                "\x1b[35m" // Magenta for network
+            } else if target.contains("miner") {
+                "\x1b[33m" // Yellow for mining
+            } else {
+                "\x1b[37m" // White for others
+            };
+            
+            writeln!(
+                buf,
+                "{}{:<5}\x1b[0m {}[{}]\x1b[0m {}",
+                level_color,
+                record.level(),
+                module_color,
+                target,
+                record.args()
+            )
+        })
+        .filter_level(LevelFilter::Info)
         .init();
-
+    
     info!("Starting Node ...");
 
     let node = Arc::new(RwLock::new(Node::new()));

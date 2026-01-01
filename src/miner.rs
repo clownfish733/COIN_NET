@@ -96,17 +96,17 @@ impl Block{
             nonce = get_nonce();
             self.update_nonce(nonce);
             if count%250000 == 0 && id==0{
-                if count <= 1_000_000{
+                if count < 1_000_000{
                     info!("each thread tried {},000 blocks", count/1_000);
                 }
                 else{
-                    info!("each thread tried {},{},000 blocks", count/1_000_000, (count/1_000)%1_000_000)
+                    info!("each thread tried {},{:03},000 blocks", count/1_000_000, (count%1_000_000)/1_000)
                 }
             }
             count += 1;
             let hash = self.calculate_hash();
             if self.meets_difficulty(&String::from_utf8_lossy(&hash), target){
-                info!("Mined: {:?}", self);
+                info!("Mined: {:?}", self.block_header);
                 if let Err(e) = network_tx.blocking_send(NetworkCommand::Block(self.clone())){
                     error!("Issue sending messages: {}", e);
                     return

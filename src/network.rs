@@ -86,7 +86,6 @@ impl Node{
                 }
             }
         }
-        info!("New Height: {}", self.height);
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
@@ -253,9 +252,8 @@ impl PeerManager{
     }
 
     async fn broadcast(&self, message: String){
-        info!("Broadcasting");
+        info!("Broadcasting: {:?}", &message);
         for (peer, _peer_info) in &self.peers {
-            info!("Sending: {}, {}", peer, message);
             self.send(peer, ConnectionResponse::send(message.clone())).await.unwrap();
         }
     }
@@ -284,7 +282,6 @@ async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>
                     };
                 }
                 {
-                    info!("Broadcasting: {:?}" , &block);
                     let peer_manager_lock = peer_manager.lock().await;
                     peer_manager_lock.broadcast(NetMessage::NewBlock(NewBlock::new(block)).to_string()).await;
                 }
@@ -501,7 +498,6 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         let mut  node_lock = node.write().await;
                                         node_lock.add_block(block.clone())
                                     };
-                                    info!("IS NEW: {}", is_new);
                                     if is_new{
                                     {
                                         let peer_manager_lock = peer_manager.lock().await;
