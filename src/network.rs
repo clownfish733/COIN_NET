@@ -89,7 +89,7 @@ impl Node{
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if block.block_header.height != (self.height + 1) {warn!("Invalid block height: {:#?}", block); return false}
+        if block.block_header.height != (self.height + 1) {return false}
         if self.utxos.add_block(block.clone()){
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
@@ -99,7 +99,7 @@ impl Node{
                     self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
                 }
             }   
-        }else{warn!("Invalid block: {:#?}", block); panic!()}
+        }
         
         true
     }
