@@ -96,8 +96,8 @@ impl Block{
         while !stop.load(Ordering::Relaxed){
             nonce = get_nonce();
             self.update_nonce(nonce);
-            if count%250000 == 0{
-                info!("{} tried {} blocks", id, count);
+            if count%250000 == 0 && id==0{
+                info!("each thread tried {} blocks", count);
             }
             count += 1;
             let hash = self.calculate_hash();
