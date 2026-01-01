@@ -1,6 +1,6 @@
 use crate::{miner::{Block, sha256}};
 
-use std::{collections::HashMap, fmt::Write, fs::File, path::Path};
+use std::{collections::HashMap};
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
 use rand_core::OsRng;
@@ -186,18 +186,6 @@ impl User{
             public_key: pk, 
             private_key: sk 
         })
-    }
-
-    fn store<P: AsRef<Path>>(&self, path: P) -> Result<()>{
-        let file = File::create(path)?;
-        serde_json::to_writer_pretty(&file, &self.to_hex_user())?;
-        Ok(())
-    }
-
-    fn load<P: AsRef<Path>>(path: P) -> Result<Self>{
-        let file = File::open(path)?;
-        let hex_user: HexUser = serde_json::from_reader(file)?;
-        Self::from_hex_user(hex_user)
     }
 
     fn sign(&self, message: String) -> Signature{

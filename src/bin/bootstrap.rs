@@ -9,7 +9,7 @@ use std::{sync::Arc, io::Write};
 
 use log::LevelFilter;
 
-use Coin::{
+use COIN_NET::{
     network::{NetworkCommand, start_network_handling, Node},
     miner::{start_mine_handling, MiningCommand}
 };
@@ -53,7 +53,7 @@ async fn main() -> Result<()>{
         })
         .filter_level(LevelFilter::Info)
         .init();
-    
+
     info!("Starting Node ...");
 
     let node = Arc::new(RwLock::new(Node::new()));

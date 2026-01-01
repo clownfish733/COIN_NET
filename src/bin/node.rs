@@ -1,13 +1,13 @@
 use anyhow::{Result, anyhow};
 
 #[allow(unused)]
-use log::{info, error, warn, Level};
+use log::{info, error, warn, Level, LevelFilter};
 
-use tokio::{runtime::{self, Builder}, sync::{RwLock, mpsc}};
+use tokio::{sync::{RwLock, mpsc}};
 
-use std::{env, fs::File, io::BufReader, net::SocketAddr, sync::Arc, time::Duration};
+use std::{env, fs::File, io::{BufReader, Write}, net::SocketAddr, sync::Arc, time::Duration};
 
-use Coin::{
+use COIN_NET::{
     network::{NetworkCommand, start_network_handling, Node},
     miner::{start_mine_handling, MiningCommand}
 };
@@ -27,8 +27,38 @@ fn get_bootstrap() -> Result<Vec<SocketAddr>>{
 #[tokio::main]
 async fn main() -> Result<()>{
 //configuring logging environment
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)  // default level
+     env_logger::builder()
+        .format(|buf, record| {
+            // Color by log level
+            let level_color = match record.level() {
+                log::Level::Error => "\x1b[31m", // Red
+                log::Level::Warn => "\x1b[33m",  // Yellow
+                log::Level::Info => "\x1b[32m",  // Green
+                log::Level::Debug => "\x1b[36m", // Cyan
+                log::Level::Trace => "\x1b[90m", // Gray
+            };
+            
+            // Color by module/target
+            let target = record.target();
+            let module_color = if target.contains("network") {
+                "\x1b[35m" // Magenta for network
+            } else if target.contains("miner") {
+                "\x1b[33m" // Yellow for mining
+            } else {
+                "\x1b[37m" // White for others
+            };
+            
+            writeln!(
+                buf,
+                "{}{:<5}\x1b[0m {}[{}]\x1b[0m {}",
+                level_color,
+                record.level(),
+                module_color,
+                target,
+                record.args()
+            )
+        })
+        .filter_level(LevelFilter::Info)
         .init();
 
 
