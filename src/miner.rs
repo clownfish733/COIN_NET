@@ -37,7 +37,6 @@ fn get_timestamp() -> usize{
         .as_secs() as usize
 }
 
-
 fn get_nonce() -> Nonce{
     let mut nonce: Nonce = [0u8; 16];
     rand::rng().fill_bytes(&mut nonce);
@@ -97,7 +96,12 @@ impl Block{
             nonce = get_nonce();
             self.update_nonce(nonce);
             if count%250000 == 0 && id==0{
-                info!("each thread tried {} blocks", count);
+                if count <= 1_000_000{
+                    info!("each thread tried {},000 blocks", count/1_000);
+                }
+                else{
+                    info!("each thread tried {},{},000 blocks", count/1_000_000, (count/1_000)%1_000_000)
+                }
             }
             count += 1;
             let hash = self.calculate_hash();
