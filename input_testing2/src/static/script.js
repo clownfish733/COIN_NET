@@ -2,6 +2,13 @@ const pkInput = document.getElementById("pk_input")
 const pkAddButton = document.getElementById("pk_add_button")
 const pkList = document.getElementById("pk_list")
 const ToList = document.getElementById("to_list")
+const submit = document.getElementById('Submit')
+const fee = document.getElementById('fee')
+
+function clear() {
+    ToList.innerHTML = ''
+    fee.value = ''
+}
 
 let pks = [];
 let tos = [];
@@ -113,6 +120,42 @@ pkInput.addEventListener('keypress', (e) => {
         addPk()
     }
 })
+
+submit.addEventListener('click',  async () =>{
+    console.log('Submit button clicked!');  //
+    const feeValue = parseInt(fee.value, 10);
+    const transaction = {
+        to: tos.map(item => item[0]),
+        to_amount: tos.map(item => item[1]),
+        fee: feeValue
+    };
+
+    try{
+        const response = await fetch('api/transaction', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(transaction),
+        });
+
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers.get('content-type'));
+        
+        // Get the raw text first to see what we're getting
+        const text = await response.text();
+        console.log('Raw response:', text);
+        
+        // Now try to parse it
+        const result = JSON.parse(text);
+        console.log('Parsed result:', result);
+    } catch(error){
+        console.error('Caught error:', error);
+    } finally {
+        clear()
+    }
+
+});
 
 renderPkList()
 renderToList()

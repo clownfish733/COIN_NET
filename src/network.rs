@@ -499,7 +499,6 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         let mut  node_lock = node.write().await;
                                         node_lock.add_block(block.clone())
                                     };
-                                    info!("Is New: {}", is_new);
                                     if is_new{
                                     {
                                         let peer_manager_lock = peer_manager.lock().await;
