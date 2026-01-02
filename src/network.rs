@@ -14,7 +14,7 @@ use log::{error, info, warn};
 
 use crate::{messages::{Blocks, GetBlocks, GetInv, GetPeerAddrs, Inv, Mempool, NewBlock, PeerAddrs, Ping, Pong, TransactionWithFee, Verack}, 
     miner::{Block, BlockHeader, HashDigest, MiningCommand, sha256},
-    transactions::{Transaction, UTXOS, User},
+    transactions::{Transaction, UTXOS, User, Wallet},
 };
 
 const DIFFICULTY: usize = 3;
@@ -29,11 +29,14 @@ pub struct Node{
     pub block_chain: Vec<Block>,
     difficulty: usize,
     reward: usize,
-    utxos: UTXOS
+    utxos: UTXOS,
+    wallet: Wallet,
 }
 
 impl Node{
     pub fn new() -> Self{
+        let user = User::new();
+
         Self { 
             height: 0, 
             version: 0, 
@@ -41,9 +44,10 @@ impl Node{
             headers: Vec::new(),
             block_chain: Vec::new(),
             difficulty: DIFFICULTY,
-            user: User::new(),
+            user: user.clone(),
             reward: 10,
-            utxos: UTXOS::new()
+            utxos: UTXOS::new(),
+            wallet: Wallet::new(user.get_pub_key())
         }
     }
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self>{
@@ -75,6 +79,7 @@ impl Node{
                     self.block_chain.push(block.clone());
                     self.headers.push(block.block_header.clone());
                     self.height += 1;
+                    self.wallet.update(block.clone());
 
                     for tx in block.transactions.clone(){
                         if tx.input_count != 0{
@@ -95,6 +100,7 @@ impl Node{
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
             self.height += 1;
+            self.wallet.update(block.clone());
             for tx in block.transactions.clone(){
                 if tx.input_count != 0{
                     self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
@@ -517,14 +523,21 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 }
 
                                 NetMessage::GetBlocks(get_blocks) => {
-                                    let start_height = get_blocks.start_height;
-                                    
+                                    let mut start_height = get_blocks.start_height;
                                     let node_clone = node.read().await.clone();
+                                    while start_height + 10<= node_clone.height{
+                                        let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..start_height+10].to_vec();
+                                    
+                                        let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
+                                        peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string()));
+                                        start_height += 10;
+                                    }
                                     let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..].to_vec();
                                     
-                                    let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
+                                        let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
                                     
-                                    response = Some(ConnectionResponse::send(msg.to_string()));
+                                        response = Some(ConnectionResponse::send(msg.to_string()));
+
                                 }   
 
                                 }
@@ -547,7 +560,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
 }
 
 async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: mpsc::Sender<ConnectionEvent>) -> Result<()>{
-    let mut buf =vec![0u8; 1024*1024];
+    let mut buf =vec![0u8; 10*1024*1024];
     loop{
         let n = match reader.read(&mut buf).await{
             Ok(0) => {

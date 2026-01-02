@@ -3,13 +3,12 @@ use anyhow::{Result, anyhow};
 #[allow(unused)]
 use log::{info, error, warn, Level, LevelFilter};
 
-use tokio::{sync::{RwLock, mpsc}};
+use tokio::{net, sync::{RwLock, mpsc}};
 
 use std::{env, fs::File, io::{BufReader, Write}, net::SocketAddr, sync::Arc, time::Duration};
 
 use COIN_NET::{
-    network::{NetworkCommand, start_network_handling, Node},
-    miner::{start_mine_handling, MiningCommand}
+    miner::{MiningCommand, start_mine_handling}, network::{NetworkCommand, Node, start_network_handling}, ui::start_server
 };
 
 const NET_ADDR: &str = "0.0.0.0:8080";
@@ -44,6 +43,8 @@ async fn main() -> Result<()>{
                 "\x1b[35m" // Magenta for network
             } else if target.contains("miner") {
                 "\x1b[33m" // Yellow for mining
+            } else if target.contains("ui") {
+                "\x1b[36m" // Cyan for UI
             } else {
                 "\x1b[37m" // White for others
             };
@@ -81,6 +82,14 @@ async fn main() -> Result<()>{
 
     tokio::spawn(async move {
     if let Err(e) = start_network_handling(&NET_ADDR.to_string(), node_clone, miner_tx_clone, network_rx).await {
+        error!("Network handling failed: {}", e);
+    }
+    });
+
+    let node_clone = Arc::clone(&node);
+    let network_tx_clone = network_tx.clone();
+    tokio::spawn(async move {
+    if let Err(e) = start_server(node_clone, network_tx_clone).await {
         error!("Network handling failed: {}", e);
     }
     });

@@ -1,12 +1,14 @@
 use crate::{miner::{Block, sha256}};
 
-use std::{collections::HashMap};
+use std::{collections::HashMap, sync::Arc};
+use axum::routing::trace;
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
 use rand_core::OsRng;
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, digest::Output};
 use serde::{Deserialize, Serialize, de::{self, Visitor}};
 use anyhow::{Result};
+use tokio::sync::RwLock;
 
 pub fn is_coinbase(transaction: &Transaction) -> bool{
     transaction.input_count == 0
@@ -18,6 +20,10 @@ pub struct UTXOS(HashMap<([u8; 32], usize), TxOutput>);
 impl UTXOS{
     pub fn new() -> Self{
         Self(HashMap::new())
+    }
+
+    pub fn add(&mut self, hash: [u8; 32], index: usize, output: TxOutput){
+        self.0.insert((hash, index), output);
     }
 
     fn get(&self, output_hash: [u8; 32], index: usize) -> Option<TxOutput>{
@@ -66,6 +72,9 @@ impl UTXOS{
         for (index, output) in transaction.outputs.iter().enumerate(){
             self.0.insert((hash, index), output.clone());
         }
+        for input in transaction.inputs{
+            self.0.remove(&(input.prev, input.output_index));
+        }
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
@@ -76,6 +85,58 @@ impl UTXOS{
             self.add_transaction(tx);
         }
         true
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Wallet{
+    pub value: usize,
+    utxos: UTXOS,
+    pub_key: Vec<u8>,
+}
+
+impl Wallet{
+    pub fn new(pub_key: Vec<u8>) -> Self{
+        Self { 
+            value: 0, 
+            utxos: UTXOS::new(),
+            pub_key: pub_key
+        }
+    }
+
+    pub fn update(&mut self, block: Block){
+        for tx in block.transactions{
+            for input in tx.clone().inputs{
+                if let Some(output) = self.utxos.get(input.prev, input.output_index){
+                    self.value -= output.value;
+                    self.utxos.0.remove(&(input.prev, input.output_index));
+                }
+            }
+            let pk_hash = sha256(hex::encode(self.pub_key.clone())).to_vec();
+            let tx_hash = sha256(tx.clone().serialize());
+            for (index, output) in tx.outputs.iter().cloned().enumerate(){
+                if let Some(hash) = output.clone().script.P2PKHOutput_pubkey_hash() && hash == pk_hash {
+                    self.utxos.add(tx_hash, index, output.clone());
+                    self.value += output.value;
+                }
+            }
+        }
+    }
+
+    pub fn get_inputs(&self, value: usize) -> Option<(Vec<([u8; 32], usize)>, usize)>{
+        let mut cur_val: usize = 0;
+        let mut utxo_clone = self.utxos.clone();
+        let mut inputs = Vec::new();
+        while cur_val <= value{
+            if let Some(key) = utxo_clone.0.keys().next().cloned() {
+                let value = utxo_clone.0.remove(&key).unwrap().value;
+                cur_val += value;
+                inputs.push(key);
+            } else{
+                return None
+            }
+        }
+        Some((inputs, cur_val))
     }
 }
 
@@ -250,6 +311,27 @@ impl Transaction{
             }]
         }
     }
+
+    pub fn new(version: usize, user: Arc<RwLock<User>>, inputs: Vec<([u8; 32], usize)>, outputs: Vec<(String, usize)>) -> Self{
+        let transaction = Transaction{
+            version,
+            input_count: inputs.len(),
+            inputs: inputs.iter().map(|(hash, index)| TxInput{
+                    prev: hash.clone(), 
+                    output_index: index.clone(), 
+                    script: Script::empty()
+                })
+                .collect(),
+            output_count: outputs.len(),
+            outputs: outputs.iter().map(|(pub_key, amount)| TxOutput{
+                value: amount.clone(),
+                script: Script::P2PKHOutput(sha256(pub_key.clone()).to_vec())
+            })
+            .collect(),
+        };
+
+        transaction
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -393,6 +475,17 @@ impl Script{
             OpCode::EQUALVERIFY,
             OpCode::CHECKSIG,
         ])
+    }
+
+    pub fn P2PKHOutput_pubkey_hash(self) -> Option<Vec<u8>>{
+        match self.0.get(2){
+            Some(OpCode::PUSHBYTES(hash)) => {
+                Some(hash.clone())
+            }
+            _ => {
+                None
+            }
+        }
     }
 }
 
