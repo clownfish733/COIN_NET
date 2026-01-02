@@ -527,12 +527,12 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 NetMessage::GetBlocks(get_blocks) => {
                                     let mut start_height = get_blocks.start_height;
                                     let node_clone = node.read().await.clone();
-                                    while start_height + 10<= node_clone.height{
+                                    while start_height + 3 <= node_clone.height{
                                         let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..start_height+10].to_vec();
                                     
                                         let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
                                         peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
-                                        start_height += 10;
+                                        start_height += 3;
                                     }
                                     let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..].to_vec();
                                     
@@ -562,7 +562,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
 }
 
 async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: mpsc::Sender<ConnectionEvent>) -> Result<()>{
-    let mut buf =vec![0u8; 10*1024*1024];
+    let mut buf =vec![0u8; 1024*1024];
     loop{
         let n = match reader.read(&mut buf).await{
             Ok(0) => {
