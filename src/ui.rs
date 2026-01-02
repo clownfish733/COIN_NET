@@ -126,7 +126,7 @@ pub async fn start_server(node: Arc<RwLock<Node>>, network_tx: mpsc::Sender<Netw
     let url = format!("http://127.0.0.1:3000");
     info!("Web ui running");
 
-    if let Err(e) = open::that(&url) {
+    if let Err(e) = webbrowser::open(&url) {
         log::warn!("Failed to open browser: {}", e);
     }
 

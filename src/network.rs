@@ -531,7 +531,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..start_height+10].to_vec();
                                     
                                         let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
-                                        peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string()));
+                                        peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
                                         start_height += 10;
                                     }
                                     let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..].to_vec();
