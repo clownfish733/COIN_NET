@@ -544,6 +544,7 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                     for block in &node.read().await.block_chain[get_blocks.start_height-1..]{
                                         let msg = NetMessage::NewBlock(NewBlock::new(block.clone()));
                                         peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
+                                        tokio::time::sleep(Duration::from_millis(100)).await;
                                     }
 
                                 }   
