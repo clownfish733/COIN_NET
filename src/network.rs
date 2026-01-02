@@ -5,6 +5,7 @@ use std::{
 use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
+use sha2::digest::InvalidOutputSize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex, RwLock, mpsc}
 };
@@ -21,16 +22,16 @@ const DIFFICULTY: usize = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node{
-    user: User,
-    height: usize,
-    version: usize,
+    pub user: User,
+    pub height: usize,
+    pub version: usize,
     mempool: Mempool,
     headers: Vec<BlockHeader>,
     pub block_chain: Vec<Block>,
     difficulty: usize,
     reward: usize,
     utxos: UTXOS,
-    wallet: Wallet,
+    pub wallet: Wallet,
 }
 
 impl Node{
@@ -100,6 +101,7 @@ impl Node{
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
             self.height += 1;
+            info!("Adding block to wallet");
             self.wallet.update(block.clone());
             for tx in block.transactions.clone(){
                 if tx.input_count != 0{

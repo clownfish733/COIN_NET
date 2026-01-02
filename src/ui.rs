@@ -6,14 +6,13 @@ use axum::{
     extract::State,
 };
 use serde::{Deserialize, Serialize};
-use log::info;
+use log::{info, warn};
 use tower_http::services::ServeDir;
 
 use tokio::{net::TcpListener, sync::{RwLock, mpsc}};
 
 use std::{
-    path::PathBuf,
-    sync::Arc,
+    os::linux::raw::stat, path::PathBuf, sync::Arc
 };
 
 use crate::{
@@ -60,9 +59,23 @@ async fn submit_transaction(State(state): State<AppState>, Json(req): Json<Trans
     }
     info!("Fee: {}", req.fee);
 
+    let mut total_spend: usize = req.to_amount.iter().sum();
+    total_spend += req.fee;
+
+    if let Some((inputs, excess)) = state.node.read().await.wallet.get_inputs(total_spend){
+        let mut outputs: Vec<(String, usize)> = req.to.iter().cloned().zip(req.to_amount).collect();
+        outputs.push((hex::encode(state.node.read().await.wallet.pub_key.clone()), excess - total_spend));
+        let tx = Transaction::new(state.node.read().await.version, state.node.read().await.user.clone(), inputs, outputs);
+        state.network_tx.send(NetworkCommand::Transaction(tx)).await.unwrap();
+    }else{
+        warn!("Amount larger: {} than currently available {}", total_spend, state.node.read().await.wallet.value);
+    }
+
+
+
 
     Json(TransactionResponse { 
-        success:true, 
+        success:false, 
         message: "Success".to_string(), 
     })
 }

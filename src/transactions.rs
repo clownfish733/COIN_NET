@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use axum::routing::trace;
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
+use log::info;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256, digest::Output};
 use serde::{Deserialize, Serialize, de::{self, Visitor}};
@@ -92,7 +93,7 @@ impl UTXOS{
 pub struct Wallet{
     pub value: usize,
     utxos: UTXOS,
-    pub_key: Vec<u8>,
+    pub pub_key: Vec<u8>,
 }
 
 impl Wallet{
@@ -123,15 +124,15 @@ impl Wallet{
         }
     }
 
-    pub fn get_inputs(&self, value: usize) -> Option<(Vec<([u8; 32], usize)>, usize)>{
+    pub fn get_inputs(&self, value: usize) -> Option<(Vec<(([u8; 32], usize), TxOutput)>, usize)>{
         let mut cur_val: usize = 0;
         let mut utxo_clone = self.utxos.clone();
         let mut inputs = Vec::new();
         while cur_val <= value{
             if let Some(key) = utxo_clone.0.keys().next().cloned() {
-                let value = utxo_clone.0.remove(&key).unwrap().value;
+                let output = utxo_clone.0.remove(&key).unwrap();
                 cur_val += value;
-                inputs.push(key);
+                inputs.push((key, output));
             } else{
                 return None
             }
@@ -307,16 +308,16 @@ impl Transaction{
             output_count: 1,
             outputs:vec![TxOutput{
                 value: reward,
-                script: Script::P2PKHOutput(sha256(String::from_utf8_lossy(&pubkey).to_string()).to_vec())
+                script: Script::P2PKHOutput(sha256(hex::encode(&pubkey)).to_vec())
             }]
         }
     }
 
-    pub fn new(version: usize, user: Arc<RwLock<User>>, inputs: Vec<([u8; 32], usize)>, outputs: Vec<(String, usize)>) -> Self{
-        let transaction = Transaction{
+    pub fn new(version: usize, user: User, inputs: Vec<(([u8; 32], usize), TxOutput)>, outputs: Vec<(String, usize)>) -> Self{
+        let mut transaction = Transaction{
             version,
             input_count: inputs.len(),
-            inputs: inputs.iter().map(|(hash, index)| TxInput{
+            inputs: inputs.iter().map(|((hash, index), _ouput)| TxInput{
                     prev: hash.clone(), 
                     output_index: index.clone(), 
                     script: Script::empty()
@@ -329,7 +330,11 @@ impl Transaction{
             })
             .collect(),
         };
-
+        for (index,(_, output)) in inputs.iter().enumerate(){
+            let sig = user.sign(hex::encode(compute_sig_hash(transaction.clone(), index, &output))).to_vec();
+            let pubkey = user.get_pub_key();
+            transaction.inputs[index].script = Script::P2PKHInput(sig, pubkey);
+        }
         transaction
     }
 }
@@ -545,4 +550,5 @@ mod tests{
         assert_eq!(script.validate_script(&tx, 0, &utxo), true)
 
     }
+
 }
