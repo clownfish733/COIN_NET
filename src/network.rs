@@ -298,13 +298,17 @@ async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>
 
             }
             NetworkCommand::Transaction(transaction) => {
-                if node.read().await.utxos.validate_transaction(transaction.clone()) {continue}
+                info!("Transaction preparing");
+                if !node.read().await.utxos.validate_transaction(transaction.clone()) {continue}
                 let fee = node.read().await.utxos.get_fee(transaction.clone()).unwrap();
+                info!("Fee: {}", fee);
                 {
                     let mut  node_lock = node.write().await;
                     node_lock.mempool.add(transaction.clone(), fee);
                 }
+                info!("Attempting to broadcast");
                 {
+                    
                     let peer_manager_lock = peer_manager.lock().await;
                     peer_manager_lock.broadcast(NetMessage::Transaction(transaction).to_string()).await;
                 }

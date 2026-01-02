@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use axum::routing::trace;
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
-use log::info;
+use log::{info, warn};
 use rand_core::OsRng;
 use sha2::{Digest, Sha256, digest::Output};
 use serde::{Deserialize, Serialize, de::{self, Visitor}};
@@ -35,17 +35,22 @@ impl UTXOS{
         let mut total_in: usize = 0;
         for input in transaction.inputs.iter(){
             match self.get(input.prev, input.output_index){
-                Some(a) => {total_in += a.value},
-                None => return None
+                Some(a) => {
+                    total_in += a.value;
+                },
+                None => {
+                    return None
+                }
             }
         }
         let total_out: usize = transaction.outputs.iter()
-            .map(|o| o.value).sum();
+            .map(|o| o.value)
+            .sum();
 
         if total_out > total_in{
             return None
         }else{
-            Some(total_out - total_in)
+            Some(total_in - total_out)
         }
 
     }
@@ -61,6 +66,7 @@ impl UTXOS{
             let utxo = self.get(input.prev, input.output_index).unwrap();
             let script = Script::concat(input.script.clone(), utxo.script.clone());
             if script.validate_script(&transaction.clone(), input.output_index, &utxo){
+                warn!("Invalide script");
                 return false
             }
         }
