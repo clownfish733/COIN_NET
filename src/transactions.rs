@@ -75,7 +75,6 @@ impl UTXOS{
 
     pub fn add_transaction(&mut self, transaction: Transaction){
         let hash = sha256(transaction.serialize().clone());
-        info!("New hash: {:?}", hash);
         for input in transaction.inputs{
             self.0.remove(&(input.prev, input.output_index));
         }
