@@ -86,7 +86,6 @@ impl UTXOS{
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        info!("old utxo: {:?}", self);
         for tx in block.transactions.clone(){
             if !self.validate_transaction(tx){
                 warn!("Invalid block"); return false}
@@ -94,7 +93,6 @@ impl UTXOS{
         for tx in block.transactions{
             self.add_transaction(tx);
         }
-        info!("new utxo: {:?}", self);
         true
     }
 }
