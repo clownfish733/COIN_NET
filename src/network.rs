@@ -5,7 +5,6 @@ use std::{
 use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
-use sha2::digest::InvalidOutputSize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex, RwLock, mpsc}
 };
@@ -101,10 +100,10 @@ impl Node{
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
             self.height += 1;
-            info!("Adding block to wallet");
             self.wallet.update(block.clone());
             for tx in block.transactions.clone(){
                 if tx.input_count != 0{
+                    let fee = self.utxos.get_fee(tx.clone());
                     self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
                 }
             }   

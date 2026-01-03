@@ -5,14 +5,16 @@ const ToList = document.getElementById("to_list")
 const submit = document.getElementById('submit')
 const fee = document.getElementById('fee')
 
-function clear() {
-    ToList.innerHTML = ''
-    fee.value = ''
-}
+
 
 let pks = [];
 let tos = [];
 const Addr = '0211d337ed116a694083637bb1f20a57e97295c8e0958323a1ea2f468fe52b1ee5'
+
+function clear() {
+    ToList.innerHTML = ''
+    fee.value = ''
+}
 
 function renderPkList() {
     pkList.innerHTML = '';

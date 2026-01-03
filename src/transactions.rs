@@ -1,15 +1,14 @@
-use crate::{miner::{Block, sha256}};
+use crate::{miner::{Block, sha256, get_timestamp}};
 
-use std::{collections::HashMap, sync::Arc};
-use axum::routing::trace;
+use std::{collections::HashMap};
+use axum::routing::get;
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
 use log::{info, warn};
 use rand_core::OsRng;
-use sha2::{Digest, Sha256, digest::Output};
+use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize, de::{self, Visitor}};
 use anyhow::{Result};
-use tokio::sync::RwLock;
 
 pub fn is_coinbase(transaction: &Transaction) -> bool{
     transaction.input_count == 0
@@ -75,22 +74,27 @@ impl UTXOS{
 
 
     pub fn add_transaction(&mut self, transaction: Transaction){
-        let hash = sha256(transaction.serialize());
-        for (index, output) in transaction.outputs.iter().enumerate(){
-            self.0.insert((hash, index), output.clone());
-        }
+        let hash = sha256(transaction.serialize().clone());
+        info!("New hash: {:?}", hash);
         for input in transaction.inputs{
             self.0.remove(&(input.prev, input.output_index));
         }
+        for (index, output) in transaction.outputs.iter().enumerate(){
+            self.0.insert((hash, index), output.clone());
+        }
+        
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
+        info!("old utxo: {:?}", self);
         for tx in block.transactions.clone(){
-            if !self.validate_transaction(tx){return false}
+            if !self.validate_transaction(tx){
+                warn!("Invalid block"); return false}
         }
         for tx in block.transactions{
             self.add_transaction(tx);
         }
+        info!("new utxo: {:?}", self);
         true
     }
 }
@@ -294,6 +298,7 @@ impl <'de>Deserialize<'de>for User{
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Transaction{
+    timestamp: usize,
     version: usize,
     pub input_count: usize,
     inputs: Vec<TxInput>,
@@ -308,6 +313,7 @@ impl Transaction{
 
     pub fn reward(reward: usize, pubkey: Vec<u8>, version: usize) -> Self{
         Self { 
+            timestamp: get_timestamp(),
             version, 
             input_count: 0, 
             inputs: Vec::new(), 
@@ -321,6 +327,7 @@ impl Transaction{
 
     pub fn new(version: usize, user: User, inputs: Vec<(([u8; 32], usize), TxOutput)>, outputs: Vec<(String, usize)>) -> Self{
         let mut transaction = Transaction{
+            timestamp: get_timestamp(),
             version,
             input_count: inputs.len(),
             inputs: inputs.iter().map(|((hash, index), _ouput)| TxInput{
@@ -526,6 +533,7 @@ mod tests{
         };
 
         let mut tx = Transaction{
+            timestamp: get_timestamp(),
             version: 10,
             input_count: 1,
             inputs: vec![TxInput{
