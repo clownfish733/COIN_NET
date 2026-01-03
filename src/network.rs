@@ -96,7 +96,7 @@ impl Node{
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
-        if block.block_header.height != (self.height + 1) {return false}
+        if block.block_header.height != (self.height + 1) { warn!("Invalid height"); return false}
         if self.utxos.add_block(block.clone()){
             self.block_chain.push(block.clone());
             self.headers.push(block.block_header.clone());
@@ -108,7 +108,7 @@ impl Node{
                     self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
                 }
             }   
-        }
+        }else{warn!("UTXOS rejected")}
         
         true
     }
@@ -284,12 +284,15 @@ async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>
     while let Some(msg) = network_rx.recv().await{
         match msg {
             NetworkCommand::Block(block) => {
+                info!("new block");
                 {
                     let mut  node_lock = node.write().await;
                     if !node_lock.add_block(block.clone()){
+                        warn!("Unable to add block");
                         continue
                     };
                 }
+                info!("Attempting to broadcast");
                 {
                     let peer_manager_lock = peer_manager.lock().await;
                     peer_manager_lock.broadcast(NetMessage::NewBlock(NewBlock::new(block)).to_string()).await;
@@ -496,13 +499,28 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 }
                                 
                                 NetMessage::Transaction(transaction) => {
-                                    if let Some(fee) = node.read().await.utxos.get_fee(transaction.clone()) && node.read().await.utxos.validate_transaction(transaction.clone()){
-                                        let mut node_lock = node.write().await;
-                                        if node_lock.mempool.add(transaction.clone(), fee){
-                                            let peer_manager_lock = peer_manager.lock().await;
-                                            peer_manager_lock.broadcast(NetMessage::Transaction(transaction).to_string()).await;
+                                    let fee_opt = {
+                                        let node_read = node.read().await;
+                                        if node_read.utxos.validate_transaction(transaction.clone()){
+                                            node_read.utxos.get_fee(transaction.clone())
+                                        } else{
+                                            None
                                         }
-                                }
+                                    };
+
+                                    if let Some(fee) = fee_opt{
+                                        let is_valid = {
+                                            let mut node_lock = node.write().await;
+                                            node_lock.mempool.add(transaction.clone(), fee)
+                                        };
+                                        if is_valid{
+                                            let peer_manager_lock = peer_manager.lock().await;
+                                            peer_manager_lock.broadcast(NetMessage::Transaction(transaction.clone()).to_string()).await;
+                                        }else{
+                                            warn!("Invalid transaction");
+                                        }
+
+                                    }
                                 }
 
                                 NetMessage::NewBlock(new_block) => {

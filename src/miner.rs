@@ -107,7 +107,7 @@ impl Block{
             let hash = self.calculate_hash();
             if self.meets_difficulty(&String::from_utf8_lossy(&hash), target){
                 info!("Mined: {:?}", self.block_header);
-                if let Err(e) = network_tx.blocking_send(NetworkCommand::Block(self.clone())){
+                if let Err(e) = network_tx.try_send(NetworkCommand::Block(self.clone())){
                     error!("Issue sending messages: {}", e);
                     return
                 }
@@ -225,6 +225,7 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
                 break; // Exit the loop
             }
             MiningCommand::UpdateBlock => {
+                info!("Updating block");
                 stop.store(true, Ordering::Relaxed);
 
                 for handle in handles {
@@ -234,8 +235,10 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
                 stop = Arc::new(AtomicBool::new(false));
                 let block = node.write().await.get_next_block();
                 handles = spawn_threads(block, Arc::clone(&stop), network_tx.clone());
+            
             }
         }
+        info!("Handled mining command");
     };
 
     for handle in handles{

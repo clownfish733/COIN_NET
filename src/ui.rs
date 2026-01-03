@@ -12,7 +12,7 @@ use tower_http::services::ServeDir;
 use tokio::{net::TcpListener, sync::{RwLock, mpsc}};
 
 use std::{
-    os::linux::raw::stat, path::PathBuf, sync::Arc
+    path::PathBuf, sync::Arc
 };
 
 use crate::{

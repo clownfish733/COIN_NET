@@ -73,8 +73,9 @@ async fn main() -> Result<()>{
     });
 
     let node_clone = Arc::clone(&node);
+    let network_tx_clone = network_tx.clone();
     let miner_handle = tokio::spawn(async move {
-    if let Err(e) = start_mine_handling(miner_rx, node_clone, network_tx).await {
+    if let Err(e) = start_mine_handling(miner_rx, node_clone, network_tx_clone).await {
         error!("Mine handling failed: {}", e);
     }
     }); 
