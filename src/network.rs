@@ -69,8 +69,7 @@ impl Node{
 
         match self.utxos.get_fee(tx.clone()){
             Some(fee) => {
-                self.mempool.add(tx, fee);
-                true
+                self.mempool.add(tx, fee)
             }
             None => false
         }

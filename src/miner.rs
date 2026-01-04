@@ -191,6 +191,7 @@ fn spawn_threads(block: Block, stop: Arc<AtomicBool>, network_tx: mpsc::Sender<N
         .unwrap_or(1);
 
      info!("Spawning: {} mining_threads for block: {}", num_threads, block.block_header.height);
+     info!("New block: {:#?}", block);
 
     let mut handles = Vec::new();
 
