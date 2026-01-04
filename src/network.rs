@@ -61,16 +61,21 @@ impl Node{
         serde_json::to_writer_pretty(&file, self)?;
         Ok(())
     }
-    /*
-    pub fn update_headers(&mut self, headers: Headers){
-        if headers.start_height + 1 == self.height{
-            for header in headers.headers{
-                self.headers.push(header);
-                self.height += 1;
-            }
+    
+    pub fn new_transaction(&mut self, tx: Transaction) -> bool{
+        if !self.utxos.validate_transaction(tx.clone()){
+            return false
         }
+
+        match self.utxos.get_fee(tx.clone()){
+            Some(fee) => {
+                self.mempool.add(tx, fee);
+                true
+            }
+            None => false
+        }
+
     }
-    */
 
     pub fn update_blocks(&mut self, blocks: Blocks){
         if blocks.start_height == self.height + 1{
@@ -107,11 +112,14 @@ impl Node{
                     if let Some(fee) = fee_option {
                         self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
                     }else{
-                        warn!("add block: No fee for: {:?}", tx);
+                        warn!("No fee for: {:?}", tx);
                     }
                 }
             }   
-        }else{warn!("UTXOS rejected")}
+        }else{
+            warn!("UTXOS rejected");
+            return false
+        }
         
         true
     }
@@ -125,13 +133,17 @@ impl Node{
                     if let Some(fee) = fee_option {
                         self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
                     }else{
-                        warn!("get_next tx: No fee for: {:?}", tx);
+                        warn!("No fee for: {:?}", tx);
                     }
                 valid_transactions = false
             }
         }
 
-        if valid_transactions{txs} else {self.get_next_transactions()}
+        if valid_transactions{
+            txs
+        } else {
+            self.get_next_transactions()
+        }
     }
 
     pub fn get_prev_hash(&self) -> HashDigest{
@@ -288,11 +300,17 @@ impl PeerManager{
     }
 }
 
-async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>, peer_manager: Arc<Mutex<PeerManager>>, node: Arc<RwLock<Node>>, miner_tx: mpsc::Sender<MiningCommand>, handler_tx: mpsc::Sender<ConnectionEvent>){
+async fn network_command_handling(
+    mut network_rx: mpsc::Receiver<NetworkCommand>, 
+    peer_manager: Arc<Mutex<PeerManager>>, 
+    node: Arc<RwLock<Node>>, 
+    miner_tx: mpsc::Sender<MiningCommand>, 
+    handler_tx: mpsc::Sender<ConnectionEvent>
+){
+
     while let Some(msg) = network_rx.recv().await{
         match msg {
             NetworkCommand::Block(block) => {
-                info!("new block");
                 {
                     let mut  node_lock = node.write().await;
                     if !node_lock.add_block(block.clone()){
@@ -300,12 +318,19 @@ async fn network_command_handling(mut network_rx: mpsc::Receiver<NetworkCommand>
                         continue
                     };
                 }
-                info!("Attempting to broadcast");
                 {
                     let peer_manager_lock = peer_manager.lock().await;
-                    peer_manager_lock.broadcast(NetMessage::NewBlock(NewBlock::new(block)).to_string()).await;
+                    peer_manager_lock
+                        .broadcast(
+                            NetMessage::NewBlock(NewBlock::new(block))
+                                .to_string()
+                    )
+                    .await;
                 }
-                miner_tx.send(MiningCommand::UpdateBlock).await.unwrap();
+
+                miner_tx.send(MiningCommand::UpdateBlock)
+                    .await
+                    .unwrap();
 
             }
             NetworkCommand::Transaction(transaction) => {
@@ -500,35 +525,31 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 }
 
                                 NetMessage::Ping(_) => {
-                                    response = Some(ConnectionResponse::send(NetMessage::Pong(Pong{}).to_string()));
+                                    response = Some(ConnectionResponse::send(
+                                        NetMessage::Pong(Pong{})
+                                        .to_string()
+                                    ));
                                 }
                                 NetMessage::Pong(_) => {
 
                                 }
                                 
                                 NetMessage::Transaction(transaction) => {
-                                    let fee_opt = {
-                                        let node_read = node.read().await;
-                                        if node_read.utxos.validate_transaction(transaction.clone()){
-                                            node_read.utxos.get_fee(transaction.clone())
-                                        } else{
-                                            None
-                                        }
+                                    let is_valid = {
+                                        node.write().await.new_transaction(transaction.clone())
                                     };
-
-                                    if let Some(fee) = fee_opt{
-                                        let is_valid = {
-                                            let mut node_lock = node.write().await;
-                                            node_lock.mempool.add(transaction.clone(), fee)
-                                        };
-                                        if is_valid{
-                                            let peer_manager_lock = peer_manager.lock().await;
-                                            peer_manager_lock.broadcast(NetMessage::Transaction(transaction.clone()).to_string()).await;
-                                        }else{
-                                            warn!("Invalid transaction");
-                                        }
-
+                                    
+                                    if is_valid{
+                                        let peer_manager_lock = peer_manager.lock().await;
+                                        peer_manager_lock.broadcast(
+                                            NetMessage::Transaction(
+                                                transaction
+                                            ).to_string())
+                                            .await;
+                                    }else{
+                                        warn!("Not new transaction: {:?}", transaction);
                                     }
+
                                 }
 
                                 NetMessage::NewBlock(new_block) => {
@@ -598,10 +619,16 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
         Ok(())
 }
 
-async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: mpsc::Sender<ConnectionEvent>) -> Result<()>{
-    loop{
 
+
+async fn connection_receiver(
+    mut reader: OwnedReadHalf, 
+    peer: &SocketAddr, 
+    tx: mpsc::Sender<ConnectionEvent>
+) -> Result<()>{
+    loop{
         let mut len_bytes = [0u8; 4];
+        
         match reader.read_exact(&mut len_bytes).await{
             Ok(_) => {},
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
@@ -625,7 +652,12 @@ async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: m
     }
 }
 
-async fn connection_sender( mut writer: OwnedWriteHalf, mut rx: mpsc::Receiver<ConnectionResponse>){
+
+
+async fn connection_sender(
+    mut writer: OwnedWriteHalf, 
+    mut rx: mpsc::Receiver<ConnectionResponse>
+){
     while let Some(response) = rx.recv().await{
         match response.connection_response_type{
             ConnectionResponseType::Close => {
@@ -643,33 +675,39 @@ async fn connection_sender( mut writer: OwnedWriteHalf, mut rx: mpsc::Receiver<C
     }
 }
 
-pub async fn start_network_handling(addr: &String, node : Arc<RwLock<Node>>, miner_tx: mpsc::Sender<MiningCommand>, network_rx: mpsc::Receiver<NetworkCommand>) -> Result<()>{
+pub async fn start_network_handling(
+    addr: &String, 
+    node : Arc<RwLock<Node>>, 
+    miner_tx: mpsc::Sender<MiningCommand>, 
+    network_rx: mpsc::Receiver<NetworkCommand>
+) -> Result<()>{
+
     info!("Starting Network Handling ...");
     
     let listener = TcpListener::bind(addr).await?;
-    
     info!("Listening on: {}", addr);
 
     let peer_manager = Arc::new(Mutex::new(PeerManager::new()));
-
     let (event_tx, rx) = mpsc::channel::<ConnectionEvent>(100);
 
+
+    //spawwing network handler
     let peer_manager_clone = Arc::clone(&peer_manager);
     let event_tx_clone = event_tx.clone();
     let node_clone = Arc::clone(&node);
     let miner_tx_clone = miner_tx.clone();
-
     tokio::spawn(async move {
         start_network_handler(rx, peer_manager_clone, node_clone, event_tx_clone, miner_tx_clone)
         .await
         .expect("Network handler failed");
     });
 
+
+    //spawing network command handler
     let peer_manager_clone = Arc::clone(&peer_manager); 
     let node_clone = Arc::clone(&node);
     let miner_tx_clone = miner_tx.clone();
     let handler_tx_clone = event_tx.clone();
-
     tokio::spawn(async move {
         network_command_handling(network_rx, peer_manager_clone, node_clone, miner_tx_clone, handler_tx_clone)
         .await
@@ -677,7 +715,6 @@ pub async fn start_network_handling(addr: &String, node : Arc<RwLock<Node>>, min
 
     loop{
         let (stream, peer) = listener.accept().await?;
-
         let(tx, rx) = mpsc::channel::<ConnectionResponse>(100);
         
         {
@@ -687,6 +724,7 @@ pub async fn start_network_handling(addr: &String, node : Arc<RwLock<Node>>, min
 
         let (reader, writer) = stream.into_split();
 
+        //spawning connection receiver for peer
         let event_tx_clone = event_tx.clone();
         tokio::spawn(async move {
             connection_receiver(reader, &peer, event_tx_clone)
@@ -694,13 +732,11 @@ pub async fn start_network_handling(addr: &String, node : Arc<RwLock<Node>>, min
             .expect("reader failed");
         });
 
+        //spawning connect sender for peer
         tokio::spawn(async move {
             connection_sender(writer, rx)
             .await
         });
-
-
-
     }
 }
 

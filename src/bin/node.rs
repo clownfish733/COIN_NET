@@ -3,7 +3,7 @@ use anyhow::{Result, anyhow};
 #[allow(unused)]
 use log::{info, error, warn, Level, LevelFilter};
 
-use tokio::{net, sync::{RwLock, mpsc}};
+use tokio::{sync::{RwLock, mpsc}};
 
 use std::{env, fs::File, io::{BufReader, Write}, net::SocketAddr, sync::Arc, time::Duration};
 
@@ -11,9 +11,14 @@ use COIN_NET::{
     miner::{MiningCommand, start_mine_handling}, network::{NetworkCommand, Node, start_network_handling}, ui::start_server
 };
 
+
+//CONSTANTS
+
 const NET_ADDR: &str = "0.0.0.0:8080";
 
 const FILE_PATH: &str = "configs/node.json";
+
+
 
 fn get_bootstrap() -> Result<Vec<SocketAddr>>{
     let file = File::open("configs/Bootstrap.json")?;
@@ -23,9 +28,11 @@ fn get_bootstrap() -> Result<Vec<SocketAddr>>{
     Ok(bootstrap)
 }   
 
+
+
 #[tokio::main]
 async fn main() -> Result<()>{
-//configuring logging environment
+    //configuring logging environment
      env_logger::builder()
         .format(|buf, record| {
             // Color by log level
@@ -72,20 +79,21 @@ async fn main() -> Result<()>{
 
     info!("Starting Node ...");
 
+    
     let (miner_tx, miner_rx) = mpsc::channel::<MiningCommand>(10);
 
     let (network_tx, network_rx) = mpsc::channel::<NetworkCommand>(10);
 
+    //spawning network handler
     let node_clone = Arc::clone(&node);
     let miner_tx_clone = miner_tx.clone();
-
-
     tokio::spawn(async move {
     if let Err(e) = start_network_handling(&NET_ADDR.to_string(), node_clone, miner_tx_clone, network_rx).await {
         error!("Network handling failed: {}", e);
     }
     });
 
+    //spawning ui server
     let node_clone = Arc::clone(&node);
     let network_tx_clone = network_tx.clone();
     tokio::spawn(async move {
@@ -94,6 +102,7 @@ async fn main() -> Result<()>{
     }
     });
 
+    //spawning mine handler
     let node_clone = Arc::clone(&node);
     let network_tx_clone = network_tx.clone();
     let miner_handle = tokio::spawn(async move {
@@ -102,23 +111,27 @@ async fn main() -> Result<()>{
     }
     }); 
 
+    //getting bootstrap addr
     let bootstrap = match get_bootstrap(){
         Ok(bootstrap) => bootstrap,
         Err(e) => {
-            error!("Couldnt read bootstrap: {}", e);
+            error!("Could not read bootstrap: {}", e);
             return Err(e)
         }
     };
     
+    //connecting to bootstrap nodes
     for peer in bootstrap{
         network_tx.send(NetworkCommand::Connect(peer)).await.unwrap();
     }
 
-
+    //shutting down
     tokio::signal::ctrl_c().await?;
     info!("Shutting down ...");
+    //stoping mining threads
     miner_tx.send(MiningCommand::Stop).await.unwrap();
     miner_handle.await?;
+    //storing nodes current state
     node.read().await.store(FILE_PATH)?;
     tokio::time::sleep(Duration::from_millis(300)).await;
     Ok(())
