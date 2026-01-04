@@ -590,23 +590,28 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
 }
 
 async fn connection_receiver(mut reader: OwnedReadHalf, peer: &SocketAddr, tx: mpsc::Sender<ConnectionEvent>) -> Result<()>{
-    let mut buf =vec![0u8; 1024*1024];
     loop{
-        let n = match reader.read(&mut buf).await{
-            Ok(0) => {
+
+        let mut len_bytes = [0u8; 4];
+        match reader.read_exact(&mut len_bytes).await{
+            Ok(_) => {},
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 tx.send(ConnectionEvent::close(peer.clone())).await?;
                 return Ok(())
-            }
-            Ok(n) => {
-                n
-            }
+            } 
             Err(e) => {
                 error!("Error reading from: {}", peer);
                 tx.send(ConnectionEvent::close(peer.clone())).await?;
                 return Err(e.into())
             }
-        };
-        let message = String::from_utf8_lossy(&buf[..n]).to_string();
+
+        }
+
+        let len = u32::from_be_bytes(len_bytes) as usize;
+        let mut buf = vec![0u8; len];
+        reader.read_exact(&mut buf).await?;
+
+        let message = String::from_utf8_lossy(&buf).to_string();
         tx.send(ConnectionEvent::message(*peer, message)).await?;
     }
 }
@@ -620,7 +625,10 @@ async fn connection_sender( mut writer: OwnedWriteHalf, mut rx: mpsc::Receiver<C
             }
             ConnectionResponseType::Send(message) => {
                 info!("Sending: {}", message);
-                writer.write_all(message.as_bytes()).await.unwrap();           
+                let bytes = message.as_bytes();
+                let len = (bytes.len() as u32).to_be_bytes();
+                writer.write_all(&len).await.unwrap();
+                writer.write_all(bytes).await.unwrap();           
             }
         }
     }
