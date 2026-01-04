@@ -107,7 +107,7 @@ impl Node{
                     if let Some(fee) = fee_option {
                         self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
                     }else{
-                        warn!("No fee for: {:?}", tx);
+                        warn!("add block: No fee for: {:?}", tx);
                     }
                 }
             }   
@@ -121,7 +121,12 @@ impl Node{
         let txs = self.mempool.get_next_transactions();
         for tx in txs.clone(){
             if !self.utxos.validate_transaction(tx.clone()){
-                self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx).unwrap()));
+                let fee_option = self.utxos.get_fee(tx.clone());
+                    if let Some(fee) = fee_option {
+                        self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
+                    }else{
+                        warn!("get_next tx: No fee for: {:?}", tx);
+                    }
                 valid_transactions = false
             }
         }
