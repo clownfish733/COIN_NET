@@ -103,8 +103,12 @@ impl Node{
             self.wallet.update(block.clone());
             for tx in block.transactions.clone(){
                 if tx.input_count != 0{
-                    let fee = self.utxos.get_fee(tx.clone());
-                    self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
+                    let fee_option = self.utxos.get_fee(tx.clone());
+                    if let Some(fee) = fee_option {
+                        self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
+                    }else{
+                        warn!("No fee for: {:?}", tx);
+                    }
                 }
             }   
         }else{warn!("UTXOS rejected")}
