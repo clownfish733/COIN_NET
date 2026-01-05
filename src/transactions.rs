@@ -1,7 +1,6 @@
 use crate::{miner::{Block, sha256, get_timestamp}};
 
 use std::{collections::HashMap};
-use axum::routing::get;
 use k256::{ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer}};
 use k256::ecdsa::signature::Verifier;
 use log::{info, warn};
@@ -38,6 +37,7 @@ impl UTXOS{
                     total_in += a.value;
                 },
                 None => {
+                    println!("Not in utxos: {}, {}", hex::encode(input.prev), input.output_index);
                     return None
                 }
             }
@@ -84,12 +84,16 @@ impl UTXOS{
         }
         
     }
-
-    pub fn add_block(&mut self, block: Block) -> bool{
+    pub fn validate_block(&self, block: Block) -> bool{
         for tx in block.transactions.clone(){
             if !self.validate_transaction(tx){
-                warn!("Invalid block"); return false}
+                warn!("Invalid block"); return false
+            }
         }
+        true
+    }
+
+    pub fn add_block(&mut self, block: Block) -> bool{
         for tx in block.transactions{
             self.add_transaction(tx);
         }
@@ -140,6 +144,7 @@ impl Wallet{
             if let Some(key) = utxo_clone.0.keys().next().cloned() {
                 let output = utxo_clone.0.remove(&key).unwrap();
                 cur_val += output.value;
+                println!("get_inputs: {}", hex::encode(key.0));
                 inputs.push((key, output));
             } else{
                 return None
@@ -267,7 +272,7 @@ impl User{
     }
 
     fn get_pub_key_hash(&self) -> Vec<u8>{
-        sha256(String::from_utf8_lossy(&self.get_pub_key()).to_string()).to_vec()
+        sha256(hex::encode(&self.get_pub_key())).to_vec()
     }
 }
 
@@ -493,7 +498,7 @@ impl Script{
         ])
     }
 
-    pub fn P2PKHOutput_pubkey_hash(self) -> Option<Vec<u8>>{
+    pub fn P2PKHOutput_pubkey_hash(&self) -> Option<Vec<u8>>{
         match self.0.get(2){
             Some(OpCode::PUSHBYTES(hash)) => {
                 Some(hash.clone())
@@ -508,6 +513,8 @@ impl Script{
 #[cfg(test)]
 #[allow(non_snake_case)]
 mod tests{
+    use crate::messages::{Mempool, TransactionWithFee};
+
     use super::*;
 
     #[test]
@@ -561,6 +568,160 @@ mod tests{
         let script = Script::concat(unlocking_script.clone(), utxo.script.clone());
         assert_eq!(script.validate_script(&tx, 0, &utxo), true)
 
+    }
+
+    fn display_wallet(wallet: &Wallet){
+        println!("Wallet");
+        println!("value: {}", wallet.value);
+        for (key, utxo) in wallet.utxos.0.iter(){
+            println!("{},{} : {} for: {}", hex::encode(key.0), key.1, &utxo.value, hex::encode(utxo.script.P2PKHOutput_pubkey_hash().unwrap()));
+        }
+    }
+
+    fn display_utxos(utxos: &UTXOS){
+        println!("UTXOS");
+        for (key, utxo) in utxos.0.iter(){
+            println!("{},{} : {} for: {}", hex::encode(key.0), key.1, &utxo.value, hex::encode(utxo.script.P2PKHOutput_pubkey_hash().unwrap()));
+        }
+    }
+
+    fn display_mempool(mempool: &Mempool){
+        println!("Mempool");
+        let mut m =  mempool.0.clone();
+        while let Some(txwf) = m.pop(){
+            println!("Fee: {}", txwf.fee);
+            println!("Tx: {}", hex::encode(txwf.transaction.serialize()));
+        }
+    }
+
+    #[test]
+    fn test_wallet(){
+        let mut utxos = UTXOS::new();
+        let mut mempool = Mempool::new();
+        let user = User::new();
+        let user2 = User::new();
+        println!("User pubkey hash: {}", hex::encode(user.get_pub_key_hash()));
+        println!("User2 pubkey hash: {}", hex::encode(user2.get_pub_key_hash()));
+        let new_tx = Transaction::reward(10, user.get_pub_key(), 1);
+        let mut wallet = Wallet::new(user.get_pub_key());
+        let block1 = Block::new(
+        vec![new_tx.clone()],
+        sha256("0000".to_string()),
+        3,
+        1,
+        1
+        );
+        println!("\nAdding first block\n");
+        wallet.update(block1.clone());
+        display_wallet(&wallet);
+        utxos.add_block(block1.clone());
+        display_utxos(&utxos);
+        println!("tx: {}", hex::encode(sha256(new_tx.clone().serialize())));
+        for tx in block1.clone().transactions{
+            if !is_coinbase(&tx){
+                if let Some(fee) = utxos.get_fee(tx.clone()){
+                    mempool.remove(TransactionWithFee::new(tx, fee));
+                }
+                else{
+                    assert_eq!(1,3);
+                    return
+                }
+            }
+        }
+        display_mempool(&mempool);
+
+
+
+        let total: usize = 5;
+        let fee: usize = 1;
+        let (inputs, value) = wallet.get_inputs(total).unwrap();
+        let mut outputs = vec![(hex::encode(user2.get_pub_key()), total - fee)];
+        outputs.push((hex::encode(wallet.pub_key.clone()), value - total));
+        let new_tx = Transaction::new(
+                1,
+                user.clone(),
+                inputs,
+                outputs,
+            );
+        mempool.add(new_tx.clone(), utxos.get_fee(new_tx.clone()).unwrap());
+        
+        let mut new_txs = mempool.get_next_transactions();
+        new_txs.push(Transaction::reward(10, user2.get_pub_key(), 1));
+        let block2 = Block::new(
+            new_txs.clone(),
+            sha256(block1.to_string()),
+            3,
+            1,
+            2,
+        );
+        println!("\nAdding second block\n");
+        for tx in block2.clone().transactions{
+            if !is_coinbase(&tx){
+                if let Some(fee) = utxos.get_fee(tx.clone()){
+                    mempool.remove(TransactionWithFee::new(tx, fee));
+                }
+                else{
+                    assert_eq!(1,3);
+                    return
+                }
+            }
+        }
+        wallet.update(block2.clone());
+        display_wallet(&wallet);
+        utxos.add_block(block2.clone());
+        display_utxos(&utxos);
+        for tx in new_txs.clone(){
+            for input in tx.inputs{
+                println!("{}, {}" , hex::encode(input.prev), input.output_index);
+            }
+        }
+        display_mempool(&mempool);
+
+
+        let total: usize = 4;
+        let fee: usize = 1;
+        let (inputs, value) = wallet.get_inputs(total).unwrap();
+    
+        let mut outputs = vec![(hex::encode(user2.get_pub_key()), total - fee)];
+        if value > total{
+            outputs.push((hex::encode(wallet.pub_key.clone()), value - total));
+        }
+
+        let new_tx = Transaction::new(
+                1,
+                user.clone(),
+                inputs,
+                outputs,
+            );
+        mempool.add(new_tx.clone(), utxos.get_fee(new_tx.clone()).unwrap());
+        let mut new_txs = mempool.get_next_transactions();
+        new_txs.push(Transaction::reward(10, user.get_pub_key(), 1));
+        let block3 = Block::new(
+            new_txs,
+            sha256(block2.to_string()),
+            3,
+            1,
+            3,
+        );
+
+        for tx in block3.clone().transactions{
+            if !is_coinbase(&tx){
+                if let Some(fee) = utxos.get_fee(tx.clone()){
+                    mempool.remove(TransactionWithFee::new(tx, fee));
+                }
+                else{
+                    assert_eq!(1,3);
+                    return
+                }
+            }
+        }
+        println!("\nAdding third block\n");
+        wallet.update(block3.clone());
+        display_wallet(&wallet);
+        utxos.add_block(block3.clone());
+        display_utxos(&utxos);
+        display_mempool(&mempool);
+        
     }
 
 }

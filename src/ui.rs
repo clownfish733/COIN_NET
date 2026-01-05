@@ -65,8 +65,11 @@ async fn submit_transaction(State(state): State<AppState>, Json(req): Json<Trans
 
     if let Some((inputs, excess)) = state.node.read().await.wallet.get_inputs(total_spend){
         let mut outputs: Vec<(String, usize)> = req.to.iter().cloned().zip(req.to_amount).collect();
-        outputs.push((hex::encode(state.node.read().await.wallet.pub_key.clone()), excess - total_spend));
-        let tx = Transaction::new(state.node.read().await.version, state.node.read().await.user.clone(), inputs, outputs);
+        outputs.push((hex::encode(state.node.read().await.user.get_pub_key().clone()), excess - total_spend));
+        let tx = {
+            let node_read = state.node.read().await;
+            Transaction::new(node_read.version, node_read.user.clone(), inputs, outputs)
+        };
         state.network_tx.send(NetworkCommand::Transaction(tx)).await.unwrap();
     }else{
         warn!("Amount larger: {} than currently available {}", total_spend, state.node.read().await.wallet.value);

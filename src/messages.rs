@@ -31,7 +31,7 @@ impl Verack{
 }
 
 #[derive(Clone, Debug)]
-struct HeapSet<T>{
+pub struct HeapSet<T>{
     heap: BinaryHeap<T>,
     elements: HashSet<T>,
 }
@@ -81,7 +81,7 @@ impl<T: Ord + Clone + Hash> HeapSet<T>{
 }
 
 #[derive(Clone, Debug)]
-pub struct Mempool(HeapSet<TransactionWithFee>);
+pub struct Mempool(pub HeapSet<TransactionWithFee>);
 
 
 impl Mempool{
@@ -156,8 +156,8 @@ impl <'de>Deserialize<'de> for Mempool{
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransactionWithFee {
-    transaction: Transaction,
-    fee: usize,
+    pub transaction: Transaction,
+    pub fee: usize,
 }
 
 impl TransactionWithFee{

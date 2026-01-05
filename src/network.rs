@@ -100,11 +100,7 @@ impl Node{
 
     pub fn add_block(&mut self, block: Block) -> bool{
         if block.block_header.height != (self.height + 1) { warn!("Invalid height"); return false}
-        if self.utxos.add_block(block.clone()){
-            self.block_chain.push(block.clone());
-            self.headers.push(block.block_header.clone());
-            self.height += 1;
-            self.wallet.update(block.clone());
+        if self.utxos.validate_block(block.clone()){
             for tx in block.transactions.clone(){
                 if tx.input_count != 0{
                     let fee_option = self.utxos.get_fee(tx.clone());
@@ -114,7 +110,13 @@ impl Node{
                         warn!("No fee for: {:?}", tx);
                     }
                 }
-            }   
+            } 
+            self.block_chain.push(block.clone());
+            self.headers.push(block.block_header.clone());
+            self.height += 1;
+            self.wallet.update(block.clone());
+            self.utxos.add_block(block.clone());
+              
         }else{
             warn!("UTXOS rejected");
             return false

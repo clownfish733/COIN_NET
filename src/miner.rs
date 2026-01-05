@@ -52,7 +52,13 @@ pub struct Block{
 
 
 impl Block{
-    pub fn new(transactions: Vec<Transaction>, prev_hash: HashDigest, difficulty: usize, version: usize, height: usize ) -> Self{
+    pub fn new(
+        transactions: Vec<Transaction>, 
+        prev_hash: HashDigest, 
+        difficulty: usize, 
+        version: usize, 
+        height: usize 
+    ) -> Self{
         
         let merkle_root = Block::get_merkle_root(transactions.clone());
         let transaction_count = transactions.len();
