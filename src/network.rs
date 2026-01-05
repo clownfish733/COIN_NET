@@ -87,7 +87,7 @@ impl Node{
 
                     for tx in block.transactions.clone(){
                         if tx.input_count != 0{
-                        self.mempool.remove(TransactionWithFee::new(tx.clone(), self.utxos.get_fee(tx.clone()).unwrap()));
+                        self.mempool.remove(tx.clone());
                         }
                     }   
                 }else{
@@ -103,12 +103,7 @@ impl Node{
         if self.utxos.validate_block(block.clone()){
             for tx in block.transactions.clone(){
                 if tx.input_count != 0{
-                    let fee_option = self.utxos.get_fee(tx.clone());
-                    if let Some(fee) = fee_option {
-                        self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
-                    }else{
-                        warn!("No fee for: {:?}", tx);
-                    }
+                    self.mempool.remove(tx);
                 }
             } 
             self.block_chain.push(block.clone());
@@ -130,12 +125,7 @@ impl Node{
         let txs = self.mempool.get_next_transactions();
         for tx in txs.clone(){
             if !self.utxos.validate_transaction(tx.clone()){
-                let fee_option = self.utxos.get_fee(tx.clone());
-                    if let Some(fee) = fee_option {
-                        self.mempool.remove(TransactionWithFee::new(tx.clone(), fee));
-                    }else{
-                        warn!("No fee for: {:?}", tx);
-                    }
+                self.mempool.remove(tx.clone());
                 valid_transactions = false
             }
         }

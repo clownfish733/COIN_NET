@@ -28,10 +28,19 @@ fn get_bootstrap() -> Result<Vec<SocketAddr>>{
     Ok(bootstrap)
 }   
 
+fn main() -> Result<()>{
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)  // Just for network + UI coordination
+        .thread_stack_size(64 * 1024 * 1024)
+        .enable_all()
+        .build()?
+        .block_on(async_main())
+}
+
+async fn async_main() -> Result<()>{
+    
 
 
-#[tokio::main]
-async fn main() -> Result<()>{
     //configuring logging environment
      env_logger::builder()
         .format(|buf, record| {

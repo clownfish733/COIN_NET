@@ -18,8 +18,17 @@ use COIN_NET::{
 //constants
 const NET_ADDR: &str = "0.0.0.0:8081";
 
-#[tokio::main]
-async fn main() -> Result<()>{
+fn main() -> Result<()>{
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)  // Just for network + UI coordination
+        .thread_stack_size(64 * 1024 * 1024)
+        .enable_all()
+        .build()?
+        .block_on(async_main())
+}
+
+
+async fn async_main() -> Result<()>{
     //configuring logging environment
     env_logger::builder()
         .format(|buf, record| {

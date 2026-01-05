@@ -304,9 +304,9 @@ pub struct Transaction{
     timestamp: usize,
     version: usize,
     pub input_count: usize,
-    inputs: Vec<TxInput>,
+    pub inputs: Vec<TxInput>,
     output_count: usize,
-    outputs: Vec<TxOutput>,
+    pub outputs: Vec<TxOutput>,
 }
 
 impl Transaction{
@@ -356,7 +356,7 @@ impl Transaction{
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-struct TxInput{
+pub struct TxInput{
     prev: [u8; 32],
     output_index: usize,
     script: Script
@@ -619,13 +619,7 @@ mod tests{
         println!("tx: {}", hex::encode(sha256(new_tx.clone().serialize())));
         for tx in block1.clone().transactions{
             if !is_coinbase(&tx){
-                if let Some(fee) = utxos.get_fee(tx.clone()){
-                    mempool.remove(TransactionWithFee::new(tx, fee));
-                }
-                else{
-                    assert_eq!(1,3);
-                    return
-                }
+                mempool.remove(tx.clone());
             }
         }
         display_mempool(&mempool);
@@ -658,7 +652,7 @@ mod tests{
         for tx in block2.clone().transactions{
             if !is_coinbase(&tx){
                 if let Some(fee) = utxos.get_fee(tx.clone()){
-                    mempool.remove(TransactionWithFee::new(tx, fee));
+                    mempool.remove(tx.clone());
                 }
                 else{
                     assert_eq!(1,3);
@@ -707,7 +701,7 @@ mod tests{
         for tx in block3.clone().transactions{
             if !is_coinbase(&tx){
                 if let Some(fee) = utxos.get_fee(tx.clone()){
-                    mempool.remove(TransactionWithFee::new(tx, fee));
+                    mempool.remove(tx.clone());
                 }
                 else{
                     assert_eq!(1,3);

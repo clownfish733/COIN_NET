@@ -121,8 +121,8 @@ impl Mempool{
         txs
     }
 
-    pub fn remove(&mut self, transaction: TransactionWithFee){
-        self.0.remove(transaction);
+    pub fn remove(&mut self, transaction: Transaction){
+        self.0.remove(TransactionWithFee::new(transaction, 0));
     }
 
     pub fn to_vec(&self) -> Vec<TransactionWithFee>{
@@ -172,7 +172,7 @@ impl TransactionWithFee{
 // Equality: based on BOTH transaction and fee (for HashSet)
 impl PartialEq for TransactionWithFee {
     fn eq(&self, other: &Self) -> bool {
-        self.transaction == other.transaction && self.fee == other.fee
+        self.transaction == other.transaction
     }
 }
 
@@ -182,7 +182,6 @@ impl Eq for TransactionWithFee {}
 impl Hash for TransactionWithFee {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.transaction.hash(state);
-        self.fee.hash(state);
     }
 }
 
