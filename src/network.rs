@@ -144,8 +144,7 @@ impl Node{
             txs
         } else {
             warn!("Invalid transaction: {:?}", self);
-            panic!();
-            //self.get_next_transactions()
+            self.get_next_transactions()
         }
     }
 
