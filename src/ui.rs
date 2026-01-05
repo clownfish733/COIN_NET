@@ -61,6 +61,7 @@ async fn submit_transaction(State(state): State<AppState>, Json(req): Json<Trans
 
     let mut total_spend: usize = req.to_amount.iter().sum();
     total_spend += req.fee;
+    info!("Wallet: {:?}", state.node.read().await.wallet);
 
     if let Some((inputs, excess)) = state.node.read().await.wallet.get_inputs(total_spend){
         let mut outputs: Vec<(String, usize)> = req.to.iter().cloned().zip(req.to_amount).collect();

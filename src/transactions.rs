@@ -58,6 +58,7 @@ impl UTXOS{
         if is_coinbase(&transaction){return true}
 
         if self.get_fee(transaction.clone()) == None{
+            warn!("NO fee for: {:?}", transaction);
             return false
         }
         
@@ -65,7 +66,7 @@ impl UTXOS{
             let utxo = self.get(input.prev, input.output_index).unwrap();
             let script = Script::concat(input.script.clone(), utxo.script.clone());
             if script.validate_script(&transaction.clone(), input.output_index, &utxo){
-                warn!("Invalide script");
+                warn!("Invalid script");
                 return false
             }
         }
