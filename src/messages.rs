@@ -268,6 +268,12 @@ impl Headers{
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetPeerAddrs;
 
+impl GetPeerAddrs{
+    pub fn new() -> Self{
+        Self
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PeerAddrs{
     pub addresses: Vec<SocketAddr>

@@ -6,13 +6,13 @@ use anyhow::Result;
 
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex, RwLock, mpsc}
+    io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex, RwLock, mpsc}, time
 };
 
 #[allow(unused)]
 use log::{error, info, warn};
 
-use crate::{messages::{Blocks, GetBlocks, GetInv, GetPeerAddrs, Inv, Mempool, NewBlock, PeerAddrs, Ping, Pong, TransactionWithFee, Verack}, 
+use crate::{messages::{GetBlocks, GetInv, GetPeerAddrs, Inv, Mempool, NewBlock, PeerAddrs, Ping, Pong, TransactionWithFee, Verack}, 
     miner::{Block, BlockHeader, HashDigest, MiningCommand, sha256},
     transactions::{Transaction, UTXOS, User, Wallet},
 };
@@ -78,27 +78,6 @@ impl Node{
             None => false
         }
 
-    }
-
-    pub fn update_blocks(&mut self, blocks: Blocks){
-        if blocks.start_height == self.height + 1{
-            for block in blocks.blockchain{
-                if self.utxos.add_block(block.clone()){
-                    self.block_chain.push(block.clone());
-                    self.headers.push(block.block_header.clone());
-                    self.height += 1;
-                    self.wallet.update(block.clone());
-
-                    for tx in block.transactions.clone(){
-                        if tx.input_count != 0{
-                        self.mempool.remove(tx.clone());
-                        }
-                    }   
-                }else{
-                    warn!("Invalid Block Received");
-                }
-            }
-        }
     }
 
     pub fn add_block(&mut self, block: Block) -> bool{
@@ -172,13 +151,10 @@ pub enum NetworkCommand{
 enum NetMessage{
     NewBlock(NewBlock),
     GetBlocks(GetBlocks),
-    Blocks(Blocks),
     Verack(Verack),
     Transaction(Transaction),
     GetInv(GetInv),
     Inv(Inv),
-    //GetHeaders(GetHeaders),
-    //Headers(Headers),
     GetPeerAddrs(GetPeerAddrs),
     PeerAddrs(PeerAddrs),
     Ping(Ping),
@@ -423,26 +399,6 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                         }
                                     }
                                 }
-                                
-                                /*
-                                NetMessage::GetHeaders(gh) => {
-                                    let start_height = gh.start_height;
-                                    
-                                    let node_clone = node.read().await.clone();
-                                    let headers: Vec<BlockHeader> = node_clone.headers[start_height..].to_vec();
-                                    
-                                    let msg = NetMessage::Headers(Headers::new(start_height, headers));
-                                    
-                                    response = Some(ConnectionResponse::send(msg.to_string()));
-                                }
-
-                                NetMessage::Headers(headers) => {
-                                    {
-                                    let mut node_lock = node.write().await;
-                                    node_lock.update_headers(headers);
-                                    }
-                                }
-                                */
 
                                 NetMessage::GetInv(_) => {
                                     
@@ -562,37 +518,12 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                     }
                                 }
 
-                                NetMessage::Blocks(blocks) => {
-                                    {
-                                    let mut node_lock = node.write().await;
-                                    node_lock.update_blocks(blocks);
-                                    }
-                                    miner_tx.send(MiningCommand::UpdateBlock).await.unwrap();
-                                }
-
                                 NetMessage::GetBlocks(get_blocks) => {
-                                    /*
-                                    let mut start_height = get_blocks.start_height;
-                                    let node_clone = node.read().await.clone();
-                                    while start_height + 3 <= node_clone.height{
-                                        let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..start_height+10].to_vec();
-                                    
-                                        let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
-                                        peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
-                                        start_height += 3;
-                                    }
-                                    let block_chain: Vec<Block> = node_clone.block_chain[start_height-1..].to_vec();
-                                    
-                                        let msg = NetMessage::Blocks(Blocks::new(start_height, block_chain));
-                                    
-                                        response = Some(ConnectionResponse::send(msg.to_string()));
-                                    */
                                     for block in &node.read().await.block_chain[get_blocks.start_height-1..]{
                                         let msg = NetMessage::NewBlock(NewBlock::new(block.clone()));
                                         peer_manager.lock().await.send(&peer, ConnectionResponse::send(msg.to_string())).await.unwrap();
                                         tokio::time::sleep(Duration::from_millis(100)).await;
                                     }
-
                                 }   
 
                                 }
@@ -670,6 +601,15 @@ async fn connection_sender(
     }
 }
 
+async fn update_peers(peer_manager: Arc<Mutex<PeerManager>>) -> Result<()>{
+    loop{
+    time::sleep(Duration::from_secs(200)).await;
+        {
+            peer_manager.lock().await.broadcast(NetMessage::GetPeerAddrs(GetPeerAddrs::new()).to_string()).await;
+        }
+    }
+}
+
 pub async fn start_network_handling(
     addr: &String, 
     node : Arc<RwLock<Node>>, 
@@ -706,6 +646,12 @@ pub async fn start_network_handling(
     tokio::spawn(async move {
         network_command_handling(network_rx, peer_manager_clone, node_clone, miner_tx_clone, handler_tx_clone)
         .await
+    });
+
+    //spawning peer_update
+    let peer_manager_clone = Arc::clone(&peer_manager);
+    tokio::spawn(async move {
+        update_peers(peer_manager_clone).await
     });
 
     loop{
