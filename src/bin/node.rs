@@ -14,7 +14,7 @@ use COIN_NET::{
 
 //CONSTANTS
 
-const NET_ADDR: &str = "0.0.0.0:8080";
+const NET_ADDR: &str = "0.0.0.0:8333";
 
 const FILE_PATH: &str = "configs/node.json";
 

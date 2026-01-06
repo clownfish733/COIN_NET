@@ -603,8 +603,9 @@ async fn connection_sender(
 
 async fn update_peers(peer_manager: Arc<Mutex<PeerManager>>) -> Result<()>{
     loop{
-    time::sleep(Duration::from_secs(200)).await;
+    time::sleep(Duration::from_secs(30)).await;
         {
+            let peer_manager_lock = 
             peer_manager.lock().await.broadcast(NetMessage::GetPeerAddrs(GetPeerAddrs::new()).to_string()).await;
         }
     }
