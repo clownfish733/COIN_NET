@@ -21,6 +21,7 @@ axum = "0.8"
 tower = "0.5"
 tower-http = {version = "0.6", features = ["fs", "cors"]}
 webbrowser = "1.0"
+reqwest = "0.13"
 
 [[bin]]
 name = "node"

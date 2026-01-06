@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 #[allow(unused)]
 use log::{info, error, warn, Level};
@@ -16,7 +16,7 @@ use COIN_NET::{
 
 
 //constants
-const NET_ADDR: &str = "0.0.0.0:8081";
+const NET_ADDR: &str = "0.0.0.0:8333";
 
 fn main() -> Result<()>{
     tokio::runtime::Builder::new_multi_thread()
@@ -65,6 +65,14 @@ async fn async_main() -> Result<()>{
         .init();
 
     info!("Starting Node ...");
+
+    let ip = reqwest::get("https://api.ipify.org")
+        .await?
+        .text()
+        .await?;
+
+    info!("{}", ip);
+
 
     let node = Arc::new(RwLock::new(Node::new()));
 

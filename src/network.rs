@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, fs::File, net::SocketAddr, path::Path, sync::Arc, time::Duration,
+    collections::HashMap, fs::File, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path, sync::Arc, time::Duration,
 };
 
 use anyhow::Result;
@@ -16,7 +16,6 @@ use crate::{messages::{GetBlocks, GetInv, GetPeerAddrs, Inv, Mempool, NewBlock, 
     miner::{Block, BlockHeader, HashDigest, MiningCommand, sha256},
     transactions::{Transaction, UTXOS, User, Wallet},
 };
-
 const DIFFICULTY: usize = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -323,7 +322,8 @@ async fn network_command_handling(
             NetworkCommand::Connect(peer) => {
                 let should_connect = {
                     let peer_manager_lock = peer_manager.lock().await.clone();
-                    !peer_manager_lock.contains(&peer)
+                    info!("new peer to connect to {}", peer.ip().to_string());
+                    !peer_manager_lock.contains(&peer) && !(peer.ip().to_string() == "192.168.1.1")
                 };
 
                 info!("Connected to: {}", &peer);
@@ -432,11 +432,14 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                 
                                 NetMessage::PeerAddrs(peers) => {
                                     for new_peer in peers.addresses.iter(){
-
                                         {
                                         let should_connect = {
                                             let peer_manager_lock = peer_manager.lock().await.clone();
-                                            !peer_manager_lock.contains(new_peer)
+                                            let ip = reqwest::get("https://api.ipify.org")
+                                                .await?
+                                                .text()
+                                                .await?;
+                                            !peer_manager_lock.contains(new_peer) && ip != new_peer.ip().to_string()
                                         };
 
                                         if should_connect{
@@ -472,6 +475,8 @@ async fn start_network_handler(mut handler_rx: mpsc::Receiver<ConnectionEvent> ,
                                             
                                         }
                                         }
+
+                                        
                                     }
                                 }
 

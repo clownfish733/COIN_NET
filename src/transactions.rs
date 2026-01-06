@@ -383,34 +383,11 @@ pub struct Script (Vec<OpCode>);
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum OpCode{
-    //data
     PUSHBYTES(Vec<u8>),
-    //stack
     DUP,
-    //DROP,
-    //SWAP,
-    
-    //crypto
-    //HASH160,
     SHA256,
     CHECKSIG,
-    //CHECKMULTISIG,
-
-    //comparison
-    //EQUAL,
     EQUALVERIFY,
-    //VERIFY,
-
-    //flow
-    //IF,
-    //ELSE,
-    //ENDIF,
-
-    //constants
-    //OP0,
-    //OP1,
-    //OP2,
-    //OP3,
 }
 
 impl Script{
