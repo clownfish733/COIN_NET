@@ -27,7 +27,7 @@ pub struct Node{
     mempool: Mempool,
     headers: Vec<BlockHeader>,
     pub block_chain: Vec<Block>,
-    difficulty: usize,
+    pub difficulty: usize,
     reward: usize,
     utxos: UTXOS,
     pub wallet: Wallet,
@@ -49,6 +49,10 @@ impl Node{
             utxos: UTXOS::new(),
             wallet: Wallet::new(user.get_pub_key())
         }
+    }
+
+    pub fn get_mempool_size(&self) -> usize{
+        self.mempool.size()
     }
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self>{
         let file = File::open(path)?;
@@ -94,7 +98,6 @@ impl Node{
                     warn!("Invalid Block Received");
                 }
             }
-            info!("New Height: {}", self.height);
         }
     }
 

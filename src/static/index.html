@@ -3,30 +3,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <h1 style="text-align: center;";>Transaction UI</h1>
     <div class="container">
-        <H1>Transactions</H1>
-        <div>
-            <h2>PUBLIC KEYS</h2>
-            <div class="input selection">
-                <input type="text" id="pk_input" placeholder="0211d337ed116a694083637bb1f20a57e97295c8e0958323a1ea2f468fe52b1ee5">
-                <button id="pk_add_button">Add</button>
+        
+        <div class="card" id="left">
+            <H2>Node Status</H2>
+            <div class="status">
+                <div class="stat">
+                    <div class="stat-label">HEIGHT</div>
+                    <div class="stat-value" id="height">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">MEMPOOL</div>
+                    <div class="stat-value" id="mempool">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">DIFFICULTY</div>
+                    <div class="stat-value" id="difficulty">0</div>
+                </div>
             </div>
-            <ul id="pk_list">
-                <li class="empty">No public keys yet</li>
-            </ul>
+            <H2>User Status</H2>
+            <div class="status">
+                <div class="stat">
+                    <div class="stat-label">ADDRESS</div>
+                    <div class="stat-value" id="user-address">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">FUNDS</div>
+                    <div class="stat-value" id="funds">0</div>
+                </div>
+            </div>
         </div>
-        <div class="Transaction">
-            <h2>From</h2>
-            <span id = "from"></span>
-            <h2>To</h2>
-            <ul id="to_list">
-                <li class="empty">No Recipients yet</li>
-            </ul>
-            <h2>Fee</h2>
+        <div class="card" id="middle-top">
+            <H2>Transaction</H2>
+            <div id="recipients">
+                <label>Recipients</label>
+                <ul id="recipient-list">
+                    <li class="empty">No Recipients yet</li>
+                </ul>
+            </div>
+            <label for="">Fee</label>
             <input type="number" id="fee", placeholder="0">
             <button id="submit">Submit</button>
+        </div>
+        <div class ="card" id="right">
+            <div id="address_book">
+                <h2>Address book</h2>
+                
+                <ul id="address-list">
+                    <li class="empty">No public keys yet</li>
+                </ul>
+                <label>Address</label>
+                <input type="text" id="address_input" placeholder="0211d337ed116a694083637bb1f20a57e97295c8e0958323a1ea2f468fe52b1ee5">
+                <label>Name</label>
+                <input type="text" id="address_label" placeholder="Bob">
+                <button id="address_add_button">Add</button>
+            </div>
+        </div>
+        <div class="card" id="middle-bottom">
+            <H2>Transaction Success</H2>
+            <div id="message">No Transaction Submitted Yet</div>
         </div>
     </div>
     <script src="/static/script.js"></script>

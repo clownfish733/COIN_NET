@@ -121,6 +121,10 @@ impl Mempool{
         txs
     }
 
+    pub fn size(&self) -> usize{
+        self.0.elements.len()
+    }
+
     pub fn remove(&mut self, transaction: Transaction){
         self.0.remove(TransactionWithFee::new(transaction, 0));
     }

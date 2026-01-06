@@ -5,7 +5,7 @@ use log::{info, error, warn, Level, LevelFilter};
 
 use tokio::{sync::{RwLock, mpsc}};
 
-use std::{env, fs::File, io::{BufReader, Write}, net::SocketAddr, sync::Arc, time::Duration};
+use std::{env, fs::File, io::{BufReader, Write}, net::SocketAddr, sync::{Arc, atomic::{AtomicBool, Ordering}}, time::Duration};
 
 use COIN_NET::{
     miner::{MiningCommand, start_mine_handling}, network::{NetworkCommand, Node, start_network_handling}, ui::start_server
@@ -93,6 +93,8 @@ async fn async_main() -> Result<()>{
 
     let (network_tx, network_rx) = mpsc::channel::<NetworkCommand>(10);
 
+    let save_requested = Arc::new(AtomicBool::new(false));
+
     //spawning network handler
     let node_clone = Arc::clone(&node);
     let miner_tx_clone = miner_tx.clone();
@@ -105,8 +107,9 @@ async fn async_main() -> Result<()>{
     //spawning ui server
     let node_clone = Arc::clone(&node);
     let network_tx_clone = network_tx.clone();
+    let save_requested_clone = Arc::clone(&save_requested);
     tokio::spawn(async move {
-    if let Err(e) = start_server(node_clone, network_tx_clone).await {
+    if let Err(e) = start_server(node_clone, network_tx_clone, save_requested_clone).await {
         error!("Network handling failed: {}", e);
     }
     });
@@ -142,6 +145,7 @@ async fn async_main() -> Result<()>{
     miner_handle.await?;
     //storing nodes current state
     node.read().await.store(FILE_PATH)?;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    save_requested.store(true, Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_millis(1000)).await;
     Ok(())
 }

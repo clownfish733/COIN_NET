@@ -1,134 +1,212 @@
-const pkInput = document.getElementById("pk_input")
-const pkAddButton = document.getElementById("pk_add_button")
-const pkList = document.getElementById("pk_list")
-const ToList = document.getElementById("to_list")
+const AddressInput = document.getElementById("address_input")
+const AddressLabel = document.getElementById("address_label")
+const AddressAddButton = document.getElementById("address_add_button")
+const AddressBook = document.getElementById("address-list")
+const RecipientList = document.getElementById("recipient-list")
 const submit = document.getElementById('submit')
 const fee = document.getElementById('fee')
 
+let address_book = new Map(); //label : address
+let recipients = []; //label: amount
 
-
-let pks = [];
-let tos = [];
-const Addr = '0211d337ed116a694083637bb1f20a57e97295c8e0958323a1ea2f468fe52b1ee5'
-
-function clear() {
-    ToList.innerHTML = ''
+function clear_transaction(){
+    RecipientList.innerHTML = ''
     fee.value = ''
 }
 
-function renderPkList() {
-    pkList.innerHTML = '';
+//Address Book Handling -------------------------------------------------------
 
-    if (pks.length === 0){
-        pkList.innerHTML = '<li class="empty">No public keys yet</li>'
+function renderAddressBook() {
+    AddressBook.innerHTML = '';
+    if (address_book.length === 0){
+        address_book.innerHTML = '';
         return;
     }
 
-    pks.forEach((pk, index) => {
+    address_book.forEach((_address, label) => {
         const li = 
         document.createElement('li');
-        li.className = 'pk'
+        li.className = 'address'
 
         const span = document.createElement('span')
-        span.textContent = pk
+        span.textContent = label
+        span.className = "address-label"
 
         const deleteBtn = document.createElement('button')
         deleteBtn.className = 'delete_button';
         deleteBtn.textContent = 'Delete';
-        deleteBtn.onclick = () => deletePk(index)
+        deleteBtn.onclick = () => deleteAddress(label)
 
         const sendBtn = document.createElement('button')
         sendBtn.className = 'send_button'
         sendBtn.textContent = 'Send'
-        sendBtn.onclick = () => amountPopup(index)
+        sendBtn.onclick = () => amountPopup(label)
 
         li.appendChild(span)
-        li.appendChild(deleteBtn)
         li.appendChild(sendBtn)
-        pkList.appendChild(li)
+        li.appendChild(deleteBtn)
+        AddressBook.appendChild(li)
     })
 }
 
-function addPk() {
-    const value = pkInput.value.trim()
 
-    if (value === ''){
-        alert('please enter a value!')
+
+function addAddress() {
+    const address = AddressInput.value.trim()
+    const label = AddressLabel.value.trim()
+
+    if (address === ''){
+        alert('please enter an address!')
         return
     }
-    pks.push(value)
-    pkInput.value = ''
-    pkInput.focus()
-    renderPkList()
+    if (label === ''){
+        alert('please enter a label')
+        return
+    }
+    if (address_book.has(label)){
+        alert('please enter unique label')
+        return
+    }
+    address_book.set(label, address);
+    AddressInput.value = ''
+    AddressLabel.value = ''
+
+    AddressInput.focus()
+    AddressLabel.focus()
+    renderAddressBook()
 }
 
-function deletePk(index){
-    pks.splice(index, 1)
-    renderPkList()
+function deleteAddress(label){
+    address_book.delete(label)
+    renderAddressBook()
 }
 
-function amountPopup(index) {
+AddressAddButton.addEventListener('click', addAddress)
+AddressInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        addAddress
+    }
+})
+
+//recipients handling -------------------------------------------------------------------
+
+function renderRecipients(){
+    RecipientList.innerHTML = '';
+
+    if (recipients.length === 0){
+        RecipientList.style.display = 'none'
+        return
+    }
+    RecipientList.style.display = ''
+    
+
+    recipients.forEach(([recipient, amount], index) => {
+        const li = document.createElement('li');
+        li.className = 'Outputs'
+        const div = document.createElement('div');
+        div.className = 'output-card'
+        
+        const span_recipient = document.createElement('span')
+        span_recipient.className = 'recipient'
+        span_recipient.textContent =  `${recipient}`
+        
+        const span_amount = document.createElement('span')
+        span_amount.className = "output-amount"
+        span_amount.textContent = `${amount}`
+        
+        
+
+        const deleteBtn = document.createElement('button')
+        deleteBtn.className = 'remove-button';
+        deleteBtn.textContent = 'Remove';
+        deleteBtn.onclick = () => deleteRecipient(index)
+
+        div.appendChild(span_recipient);
+        div.appendChild(span_amount);
+        div.appendChild(deleteBtn);
+
+        li.appendChild(div)
+        RecipientList.appendChild(li)
+    })     
+}
+
+function addRecipient(label, amount){
+    recipients.push([label, amount])
+    renderRecipients()
+}
+
+function deleteRecipient(index){
+    recipients.splice(index, 1)
+    renderRecipients()
+}
+
+function amountPopup(label) {
     const userInput = prompt("Enter amount: ");
     const amount = parseInt(userInput);
 
     if(!isNaN(amount)){
-        addTo(index, amount)
+        addRecipient(label, amount)
     }else{
         alert("That's not a valid number")
     }
 }
 
-function addTo(index, amount){
-    tos.push([pks[index], amount])
-    renderToList()
-}
+//api handling ----------------------------------------------------------------------
 
-function deleteTo(index){
-    tos.splice(index, 1)
-    renderToList()
-}
-
-function renderToList(){
-    ToList.innerHTML = '';
-
-    if (tos.length === 0){
-        ToList.innerHTML = '<li class="empty">No public keys yet</li>'
-        return;
+async function loadAddressBook() {
+    try{
+        console.log('Loading address book');
+        const response = await fetch('/api/address_book');
+        const data = await response.json()
+        address_book = new Map(Object.entries(data));
+    } catch(err) {
+        console.error('Failed to load Address Book:', err);
+        address_book = M
     }
-
-    tos.forEach(([pk, amount], index) => {
-        const li = 
-        document.createElement('li');
-        li.className = 'pkto'
-        const span = document.createElement('span')
-        span.textContent =  `${pk}: ${amount}`
-        
-        const deleteBtn = document.createElement('button')
-        deleteBtn.className = 'remove_button';
-        deleteBtn.textContent = 'Remove';
-        deleteBtn.onclick = () => deleteTo(index)
-
-        li.appendChild(span)
-        li.appendChild(deleteBtn)
-        ToList.appendChild(li)
-    })     
-
-
+    renderAddressBook()
 }
 
-pkAddButton.addEventListener('click', addPk)
-pkInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        addPk()
+async function saveAddressBook() {
+    try{
+        const obj = Object.fromEntries(address_book);
+
+        await fetch('/api/address_book', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json'},
+            body: JSON.stringify(obj)
+        });
+        console.log('Addresss Book saved')
+    } catch(err) {
+        console.error("failed to save Address Book:", err);
     }
-})
+}
+
+async function  updateStatus() {
+    try {
+        const response = await fetch('/api/node_status');
+        const data = await response.json();
+        document.getElementById("height").textContent = data.height
+        document.getElementById("mempool").textContent = data.mempool_size
+        document.getElementById("difficulty").textContent = data.difficulty
+    } catch(error) {
+        console.error("Failed to fetch node status", error);
+    }
+    try{
+        const response = await fetch('/api/user_status');
+        const data = await response.json();
+        document.getElementById('user-address').textContent = data.pk
+        document.getElementById('funds').textContent = data.amount
+    } catch(error) {
+        console.error("Failed to fetch user status")
+    }
+}
 
 submit.addEventListener('click',  async () =>{
     console.log('Submit button clicked!');  //
     const feeValue = parseInt(fee.value, 10);
     const transaction = {
-        to: tos.map(item => item[0]),
-        to_amount: tos.map(item => item[1]),
+        to: recipients.map(item => address_book.get(item[0])),
+        to_amount: recipients.map(item => item[1]),
         fee: feeValue
     };
 
@@ -140,24 +218,43 @@ submit.addEventListener('click',  async () =>{
             },
             body: JSON.stringify(transaction),
         });
-
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers.get('content-type'));
-        
-        // Get the raw text first to see what we're getting
+        clear_transaction()
         const text = await response.text();
-        console.log('Raw response:', text);
         
-        // Now try to parse it
         const result = JSON.parse(text);
-        console.log('Parsed result:', result);
+        document.getElementById('message').textContent  = result.message;
+    
+        document.getElementById('message').className = (result.success ? 'success' : 'fail')
+        document.getElementById('message').style.display = 'block'
+
+        updateStatus()
+
     } catch(error){
         console.error('Caught error:', error);
     } finally {
-        clear()
+        transaction
     }
 
 });
 
-renderPkList()
-renderToList()
+setInterval(async() => {
+    try{
+        const response = await fetch('/api/save_check');
+        const data = await response.json();
+
+        if (data.save) {
+            await saveAddressBook()
+            document.body.innerHTML = '<h1>Server has shut down. Please close this tab.</h1>';
+        }
+    } catch (err) {
+
+    }
+})
+setInterval(updateStatus, 2000);
+
+//Initial function calls---------------------------------------------------------------------
+renderAddressBook()
+renderRecipients()
+updateStatus()
+
+document.addEventListener('DOMContentLoaded', loadAddressBook);

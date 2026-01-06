@@ -144,7 +144,6 @@ impl Wallet{
             if let Some(key) = utxo_clone.0.keys().next().cloned() {
                 let output = utxo_clone.0.remove(&key).unwrap();
                 cur_val += output.value;
-                println!("get_inputs: {}", hex::encode(key.0));
                 inputs.push((key, output));
             } else{
                 return None

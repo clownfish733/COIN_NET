@@ -112,7 +112,7 @@ impl Block{
             count += 1;
             let hash = self.calculate_hash();
             if self.meets_difficulty(&String::from_utf8_lossy(&hash), target){
-                info!("Mined: {:?}", self.block_header);
+                info!("Mined Block {}", self.block_header.height);
                 if let Err(e) = network_tx.try_send(NetworkCommand::Block(self.clone())){
                     error!("Issue sending messages: {}", e);
                     return
@@ -196,7 +196,6 @@ fn spawn_threads(block: Block, stop: Arc<AtomicBool>, network_tx: mpsc::Sender<N
         .map(|n| n.get())
         .unwrap_or(1);
 
-     info!("New block: {:?}", block);
      info!("Spawning: {} mining_threads for block: {}", num_threads, block.block_header.height);
     
 
@@ -233,7 +232,6 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
                 break; // Exit the loop
             }
             MiningCommand::UpdateBlock => {
-                info!("Updating block");
                 stop.store(true, Ordering::Relaxed);
 
                 for handle in handles {
@@ -246,7 +244,6 @@ pub async fn start_mine_handling(mut mining_rx : mpsc::Receiver<MiningCommand>, 
             
             }
         }
-        info!("Handled mining command");
     };
 
     for handle in handles{
